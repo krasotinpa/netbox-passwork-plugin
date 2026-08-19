@@ -1,5 +1,8 @@
 # netbox-passwork
 
+[![CI](https://github.com/krasotinpa/netbox-passwork-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/krasotinpa/netbox-passwork-plugin/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 NetBox plugin for Passwork secrets manager integration.
 
 Adds a **Passwork** tab to Device, Virtual Machine, and Service pages,
