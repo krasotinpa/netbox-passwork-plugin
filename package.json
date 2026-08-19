@@ -1,0 +1,11 @@
+{
+  "name": "netbox-passwork-plugin-frontend-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-vm-modules --test netbox_passwork/tests/js/**/*.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}

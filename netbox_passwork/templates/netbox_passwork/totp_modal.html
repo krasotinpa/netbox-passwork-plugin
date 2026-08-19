@@ -1,0 +1,36 @@
+{% load i18n %}
+<div class="modal fade" id="pw-totp-modal" tabindex="-1" aria-labelledby="pw-totp-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pw-totp-modal-label">
+          <i class="mdi mdi-two-factor-authentication me-1"></i>{% trans "Two-factor authentication" %}
+        </h5>
+        <button type="button" class="btn-close" onclick="pwHideModal('pw-totp-modal')" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="pw-totp-error" class="alert alert-danger d-none" role="alert"></div>
+        <p class="text-muted text-center">{% trans "Enter the 6-digit code from your authenticator app." %}</p>
+        <div class="d-flex justify-content-center gap-2" id="pw-totp-digits">
+          {% for i in "123456" %}
+          <input type="text"
+                 class="form-control text-center font-monospace fw-bold fs-4 pw-totp-digit"
+                 maxlength="1"
+                 inputmode="numeric"
+                 pattern="[0-9]"
+                 style="width:48px; height:56px;"
+                 autocomplete="off">
+          {% endfor %}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="pwShowLoginModal()">
+          <i class="mdi mdi-arrow-left"></i> {% trans "Back" %}
+        </button>
+        <button type="button" class="btn btn-primary" id="pw-totp-submit" onclick="pwSubmitTotp()">
+          {% trans "Confirm" %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

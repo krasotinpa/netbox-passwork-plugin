@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=77"]  # >= 77: PEP 639 (license as an SPDX expression + license-files)
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netbox-passwork"
+version = "1.2.0"
+description = "Passwork secrets integration plugin for NetBox"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Pavel Krasotin", email = "krasotinpa@gmail.com"},
+]
+requires-python = ">=3.11"
+keywords = ["netbox", "netbox-plugin", "passwork", "secrets", "password-manager"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Plugins",
+    "Framework :: Django",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Systems Administration",
+]
+# Django, NetBox and their dependencies come with the NetBox installation the plugin runs inside,
+# so they are not declared here. Below are only the packages the plugin imports directly.
+dependencies = [
+    "requests>=2.31",
+    "cryptography>=41.0",
+    "djangorestframework>=3.14",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-django>=4.8",
+    "responses>=0.25",
+    "coverage[toml]>=7.4",
+    "ruff>=0.16",
+    "pre-commit>=3.7",
+    "build>=1.2",
+    "twine>=5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/krasotinpa/netbox-passwork-plugin"
+Repository = "https://github.com/krasotinpa/netbox-passwork-plugin"
+Issues = "https://github.com/krasotinpa/netbox-passwork-plugin/issues"
+Changelog = "https://github.com/krasotinpa/netbox-passwork-plugin/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["netbox_passwork*"]
+exclude = ["netbox_passwork.tests*"]
+
+[tool.setuptools.package-data]
+netbox_passwork = [
+    "templates/**/*.html",
+    "static/**/*.js",
+    "static/**/*.css",
+]
+
+[tool.ruff]
+line-length = 119
+target-version = "py311"
+# Python only: ruff >= 0.16 also formats fenced code blocks in *.md (README, docs/) by default
+include = ["*.py", "*.pyi", "**/pyproject.toml"]
+exclude = [
+    ".venv/",
+    "venv/",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.coverage.run]
+source = ["netbox_passwork"]
+omit = ["netbox_passwork/tests/*", "netbox_passwork/migrations/*"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true

@@ -1,0 +1,30 @@
+{% load i18n %}
+<div class="modal fade" id="pw-login-modal" tabindex="-1" aria-labelledby="pw-login-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pw-login-modal-label">
+          <i class="mdi mdi-lock-outline me-1"></i>{% trans "Passwork login" %}
+        </h5>
+        <button type="button" class="btn-close" onclick="pwHideModal('pw-login-modal')" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="pw-login-error" class="alert alert-danger d-none" role="alert"></div>
+        <div class="mb-3">
+          <label for="pw-login-username" class="form-label">{% trans "Username" %}</label>
+          <input type="text" class="form-control" id="pw-login-username" autocomplete="username">
+        </div>
+        <div class="mb-3">
+          <label for="pw-login-password" class="form-label">{% trans "Password" %}</label>
+          <input type="password" class="form-control" id="pw-login-password" autocomplete="current-password" onkeydown="if(event.key==='Enter')pwSubmitLogin()">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="pwHideModal('pw-login-modal')">{% trans "Cancel" %}</button>
+        <button type="button" class="btn btn-primary" id="pw-login-submit" onclick="pwSubmitLogin()">
+          {% trans "Log in" %}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

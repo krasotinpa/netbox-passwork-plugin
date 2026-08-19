@@ -1,0 +1,47 @@
+{% load i18n %}
+<div class="modal fade" id="pw-picker-modal" tabindex="-1" aria-labelledby="pw-picker-modal-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pw-picker-modal-label">
+          <i class="mdi mdi-folder-search-outline me-1"></i>{% trans "Bind Passwork secret" %}
+        </h5>
+        <button type="button" class="btn-close" onclick="pwHideModal('pw-picker-modal')" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {# Search #}
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="mdi mdi-magnify"></i></span>
+          <input type="text" class="form-control" id="pw-picker-search"
+                 placeholder="{% trans 'Search secrets…' %}"
+                 oninput="pwPickerSearch(this.value)">
+        </div>
+
+        <div class="row">
+          {# Folder tree #}
+          <div class="col-4 border-end">
+            <div class="small text-muted mb-2">{% trans "Folders" %}</div>
+            <div id="pw-picker-tree">
+              <div class="text-center text-muted py-3">
+                <div class="spinner-border spinner-border-sm"></div>
+              </div>
+            </div>
+          </div>
+
+          {# Secret list #}
+          <div class="col-8">
+            <div class="small text-muted mb-2">{% trans "Secrets" %}</div>
+            <div id="pw-picker-list">
+              <div class="text-center text-muted py-3">
+                {% trans "Select a folder or search for secrets." %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="pwHideModal('pw-picker-modal')">{% trans "Cancel" %}</button>
+      </div>
+    </div>
+  </div>
+</div>
