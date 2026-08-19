@@ -10,7 +10,7 @@ changes make their way into `main`.
 
 | Component | Version | Source |
 |---|---|---|
-| Python | ≥ 3.11 | `requires-python` in [pyproject.toml](../pyproject.toml) |
+| Python | ≥ 3.12 | `requires-python` in [pyproject.toml](../pyproject.toml) |
 | NetBox | ≥ 4.5 | `min_version = "4.5"` in [netbox_passwork/config.py](../netbox_passwork/config.py) |
 | PostgreSQL | 13+ | [README.md](../README.md) |
 | Passwork | 7.6+ (CSE off) | [README.md](../README.md) |
@@ -72,6 +72,18 @@ them is an `.env` file in the repository root (git-ignored), see
 `NETBOX_CONFIGURATION` (the NetBox configuration module where the plugin is registered in
 `PLUGINS`) and `NODE_BIN` (a Linux node build — relevant under WSL, where `PATH` may point at a
 Windows node).
+
+If you do not have a NetBox configuration with the plugin registered yet, copy the ready-made one:
+
+```bash
+cp testing/configuration.py $NETBOX_ROOT/netbox/netbox/configuration.py
+```
+
+[testing/configuration.py](../testing/configuration.py) declares everything the suite needs —
+database, both Redis sections, a `SECRET_KEY`, `PLUGINS` and the two required plugin settings
+(`PASSWORK_URL`, `SESSION_ENCRYPT_KEY`; both are placeholders, since the tests mock every Passwork
+call). Each value can be overridden through an environment variable, which is how CI reuses the same
+file.
 
 ---
 
@@ -232,18 +244,26 @@ pre-commit run --all-files
 ### Continuous integration
 
 [.github/workflows/ci.yml](../.github/workflows/ci.yml) runs on every push to `main` and on every
-pull request, with three jobs:
+pull request, with four jobs:
 
 | Job | What it runs |
 |---|---|
 | `ruff` | `scripts/test.sh lint` with `ruff` pinned to the version in `.pre-commit-config.yaml` |
 | `JS tests` | `npm install` + `scripts/test.sh js` (node 22, jsdom) |
 | `build + twine check` | `python -m build` and `twine check dist/*` — validates the package metadata |
+| `pytest` | the full Python suite against a real NetBox, as a matrix of NetBox 4.5/4.6 × Python 3.12/3.14 |
 
-**The Python tests are not part of CI**: they run inside a real NetBox installation
-(`DJANGO_SETTINGS_MODULE = netbox.settings`, an existing test database reused via `--reuse-db`),
-which a stock runner does not have. Run `scripts/test.sh all` locally before opening a PR and paste
-its markdown summary into the PR body, together with `pre-commit` and the release checklist below.
+The `pytest` job builds the environment the suite needs: `postgres` and `redis` service containers
+(Redis is not optional — `test_changelog.py` goes through the full middleware stack, and NetBox's
+`CoreMiddleware` reads its config from the caching Redis), a NetBox checkout at the matrix version
+with `testing/configuration.py` in place, and the plugin installed into NetBox's own venv — the
+settings module imports every entry of `PLUGINS` before pytest's conftest puts the repository root
+on `sys.path`. It then runs `manage.py migrate` explicitly, because `django_db_setup` in
+[conftest.py](../netbox_passwork/tests/conftest.py) is a no-op and pytest-django therefore neither
+creates nor migrates a database. The job finishes with `makemigrations --check` and `manage.py check`.
+
+Run `scripts/test.sh all` locally before opening a PR anyway and paste its markdown summary into the
+PR body, together with `pre-commit` and the release checklist below.
 
 ---
 

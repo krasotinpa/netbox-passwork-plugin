@@ -54,8 +54,9 @@ Keep each PR focused on a single task; split large work into smaller PRs.
 
 - Behavioural changes are covered by tests.
 - Run the checks: `scripts/test.sh all` (lint + Python tests + JS tests) and paste its markdown
-  summary into the PR body. CI runs ruff, the JS tests and the package build on every pull
-  request, but the Python tests need a NetBox installation and therefore run locally only.
+  summary into the PR body. CI repeats all of it on every pull request — ruff, the JS tests, the
+  package build and the Python suite against a matrix of NetBox and Python versions — but a local
+  run gives you the answer minutes earlier.
 - Docs stay consistent with the change (`docs/`, ADRs).
 - User-visible changes get an entry in `CHANGELOG.md` under `[Unreleased]`
   (`Added` / `Changed` / `Fixed` / `Removed`).

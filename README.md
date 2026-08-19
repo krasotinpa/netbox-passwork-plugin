@@ -15,7 +15,7 @@ allowing users to view, reveal, and copy secrets from Passwork without leaving N
 | Component   | Version       |
 |-------------|---------------|
 | NetBox      | 4.5+          |
-| Python      | 3.11+         |
+| Python      | 3.12+         |
 | PostgreSQL  | 13+           |
 | Passwork    | 7.6+ (CSE off)|
 
