@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       # Pinned to the same version as .pre-commit-config.yaml, so CI and the local
       # pre-commit hooks always agree on formatting.
       - run: pip install ruff==0.16.3
@@ -44,7 +44,77 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: pip install build twine
       - run: python -m build
       - run: twine check dist/*
+
+  test-python:
+    name: pytest (NetBox ${{ matrix.netbox }}, py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.14"]
+        netbox: ["v4.5.10", "v4.6.8"]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: netbox
+          POSTGRES_USER: netbox
+          POSTGRES_PASSWORD: netbox
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    env:
+      # scripts/test.sh derives PYTHONPATH and NETBOX_VENV ($NETBOX_ROOT/venv) from this.
+      NETBOX_ROOT: ${{ github.workspace }}/netbox
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Clone NetBox ${{ matrix.netbox }}
+        run: git clone --depth 1 --branch ${{ matrix.netbox }} https://github.com/netbox-community/netbox.git "$NETBOX_ROOT"
+
+      # The plugin must be installed into NetBox's own venv: netbox.settings imports every
+      # entry of PLUGINS before pytest's conftest puts the repository root on sys.path.
+      - name: Install NetBox and the plugin
+        run: |
+          python -m venv "$NETBOX_ROOT/venv"
+          "$NETBOX_ROOT/venv/bin/pip" install --upgrade pip
+          "$NETBOX_ROOT/venv/bin/pip" install -r "$NETBOX_ROOT/requirements.txt"
+          "$NETBOX_ROOT/venv/bin/pip" install -e ".[dev]"
+
+      - name: Configure NetBox
+        run: cp testing/configuration.py "$NETBOX_ROOT/netbox/netbox/configuration.py"
+
+      # conftest.py overrides django_db_setup with a no-op, so pytest-django never creates
+      # or migrates a database — CI has to do it, against an empty one.
+      - name: Migrate
+        working-directory: ${{ github.workspace }}/netbox/netbox
+        run: ../venv/bin/python manage.py migrate --no-input
+
+      - name: Run the test suite
+        run: scripts/test.sh
+
+      - name: Check for missing migrations
+        working-directory: ${{ github.workspace }}/netbox/netbox
+        run: ../venv/bin/python manage.py makemigrations --check --dry-run netbox_passwork
+
+      - name: Django system check
+        working-directory: ${{ github.workspace }}/netbox/netbox
+        run: ../venv/bin/python manage.py check

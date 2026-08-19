@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 authors = [
     {name = "Pavel Krasotin", email = "krasotinpa@gmail.com"},
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"  # NetBox 4.5+ itself requires 3.12
 keywords = ["netbox", "netbox-plugin", "passwork", "secrets", "password-manager"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -21,7 +21,6 @@ classifiers = [
     "Intended Audience :: System Administrators",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -74,7 +73,7 @@ netbox_passwork = [
 
 [tool.ruff]
 line-length = 119
-target-version = "py311"
+target-version = "py312"
 # Python only: ruff >= 0.16 also formats fenced code blocks in *.md (README, docs/) by default
 include = ["*.py", "*.pyi", "**/pyproject.toml"]
 exclude = [

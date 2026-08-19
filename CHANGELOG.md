@@ -6,6 +6,13 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+### Added
+- CI runs the Python test suite against a real NetBox (PostgreSQL + Redis service containers, matrix of NetBox 4.5/4.6 × Python 3.12/3.14), plus `makemigrations --check` and `manage.py check`
+- `testing/configuration.py` — a ready-made NetBox configuration for running the test suite, used by CI and usable locally
+
+### Changed
+- **Breaking:** `requires-python` is now `>=3.12`, matching NetBox 4.5+, which does not run on Python 3.11
+
 ## [1.3.1] — 2026-08-19
 
 ### Fixed
