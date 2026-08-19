@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="netbox-passwork">
+  <title>netbox-passwork</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2c5c8f"/>
+      <stop offset="1" stop-color="#17304b"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="104" fill="url(#bg)"/>
+
+  <!-- Shield: every access to a secret is brokered by the plugin -->
+  <path d="M256 62 88 128v150c0 108 72 178 168 210 96-32 168-102 168-210V128L256 62z"
+        fill="#ffffff" opacity="0.13"/>
+  <path d="M256 62 88 128v150c0 108 72 178 168 210 96-32 168-102 168-210V128L256 62z"
+        fill="none" stroke="#ffffff" stroke-width="28" stroke-linejoin="round"/>
+
+  <!-- Padlock: the secret itself -->
+  <path d="M194 232v-38a62 62 0 0 1 124 0v38" fill="none" stroke="#7fc4ff" stroke-width="30"
+        stroke-linecap="round"/>
+  <rect x="166" y="232" width="180" height="146" rx="26" fill="#7fc4ff"/>
+  <circle cx="256" cy="292" r="24" fill="#17304b"/>
+  <path d="M256 300v42" stroke="#17304b" stroke-width="24" stroke-linecap="round"/>
+</svg>

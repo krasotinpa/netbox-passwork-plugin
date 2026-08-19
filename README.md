@@ -1,3 +1,5 @@
+<img src="docs/img/icon.svg" alt="" width="96" align="right">
+
 # netbox-passwork
 
 [![CI](https://github.com/krasotinpa/netbox-passwork-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/krasotinpa/netbox-passwork-plugin/actions/workflows/ci.yml)
@@ -16,8 +18,30 @@ allowing users to view, reveal, and copy secrets from Passwork without leaving N
 |-------------|---------------|
 | NetBox      | 4.5+          |
 | Python      | 3.12+         |
-| PostgreSQL  | 13+           |
+| PostgreSQL  | 14+           |
 | Passwork    | 7.6+ (CSE off)|
+
+### Compatibility
+
+| Plugin  | NetBox    | Python      | Tested in CI                           |
+|---------|-----------|-------------|----------------------------------------|
+| 1.3.x   | 4.5 – 4.6 | 3.12 – 3.14 | NetBox 4.5.10 and 4.6.8 on 3.12 / 3.14 |
+| 1.0–1.2 | 4.5       | 3.11+       | not covered by CI                      |
+
+Every pull request runs the full test suite against the NetBox versions in the table above — see
+[.github/workflows/ci.yml](.github/workflows/ci.yml). Python 3.12 is the floor because NetBox 4.5
+requires it.
+
+### Dependencies
+
+Django, NetBox and their dependencies come from the NetBox installation the plugin runs inside. On
+top of those, the plugin pulls in:
+
+| Package               | Version  | Used for                                         |
+|-----------------------|----------|--------------------------------------------------|
+| `requests`            | `>=2.31` | the Passwork API client                          |
+| `cryptography`        | `>=41.0` | Fernet encryption of the Passwork session tokens |
+| `djangorestframework` | `>=3.14` | serializers for the NetBox changelog integration |
 
 ---
 
@@ -221,6 +245,20 @@ pre-commit install
 pre-commit run --all-files
 ```
 
+## Support
+
+- **Questions and bug reports** — open an [issue](https://github.com/krasotinpa/netbox-passwork-plugin/issues).
+  The bug report form asks for the plugin, NetBox and Passwork versions, which is usually what a
+  diagnosis needs; please redact secrets from any logs you attach.
+- **Security issues** — do not open a public issue. Report them privately to the maintainer at
+  krasotinpa@gmail.com. [docs/security.md](docs/security.md) documents the security model and the
+  known limitations.
+- **Feature requests** — use the feature request form and describe the workflow you are trying to
+  support, not only the change you have in mind.
+
+This is a single-maintainer project: expect a reply within a few working days rather than within
+hours, and no guaranteed response times.
+
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome — see
@@ -230,3 +268,6 @@ Bug reports, feature requests and pull requests are welcome — see
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+The plugin icon ([docs/img/icon.svg](docs/img/icon.svg)) is an original work by the maintainer,
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
