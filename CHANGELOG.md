@@ -6,6 +6,8 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-08-19
+
 ### Changed
 - **All plugin API errors now share one body format `{"code", "detail"}`** — the remaining endpoints (`GET secrets/`, `POST bindings/`, `DELETE bindings/<id>/`, `GET audit/`) and the NetBox permission checks (`not_authenticated` / `netbox_permission_denied`) were aligned with the Passwork-facing ones: `detail` is always present, the extra `param` field of `invalid_param` (audit filters/pagination) is folded into `detail`, `status: "error"` is gone. Values of `code`, routes and successful bodies are unchanged
 - Passwork-facing endpoints (login/TOTP/detail/copy/picker) answer `405 Method Not Allowed` for an unsupported HTTP method before touching the Passwork session (previously `401` without a session), and `OPTIONS` no longer requires a Passwork session
