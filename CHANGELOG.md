@@ -6,6 +6,9 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+### Fixed
+- The wheel no longer ships `netbox_passwork/tests` (it was pulled in as package data despite the `packages.find` exclusion, which also produced a setuptools warning during the build)
+
 ## [1.3.0] — 2026-08-19
 
 ### Changed
