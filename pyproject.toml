@@ -53,6 +53,13 @@ Repository = "https://github.com/krasotinpa/netbox-passwork-plugin"
 Issues = "https://github.com/krasotinpa/netbox-passwork-plugin/issues"
 Changelog = "https://github.com/krasotinpa/netbox-passwork-plugin/blob/main/CHANGELOG.md"
 
+[tool.setuptools]
+# Off by default only for us: with it on (the setuptools default for pyproject-based
+# configs) every file of the sdist — netbox_passwork/tests included — is copied into
+# the wheel as package data, bypassing the `exclude` below. Package data is therefore
+# listed explicitly in [tool.setuptools.package-data].
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["netbox_passwork*"]
