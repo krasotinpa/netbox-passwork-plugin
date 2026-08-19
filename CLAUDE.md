@@ -29,4 +29,5 @@ scripts/release.sh check                                 # release status (see d
 
 - Do not read all of `docs/`: `docs/index.md` → the relevant document → the source file.
 - While editing code, run only the affected tests; run the full `scripts/test.sh all` once before
-  opening a pull request and paste its summary into the PR body (there is no CI).
+  opening a pull request and paste its summary into the PR body — CI covers lint, the JS tests and
+  the package build, but the Python tests need a NetBox installation and run locally only.

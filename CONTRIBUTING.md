@@ -53,8 +53,9 @@ Keep each PR focused on a single task; split large work into smaller PRs.
 ## Before opening a PR
 
 - Behavioural changes are covered by tests.
-- Run the checks: `scripts/test.sh all` (lint + Python tests + JS tests). There is no CI, so
-  paste its markdown summary into the PR body.
+- Run the checks: `scripts/test.sh all` (lint + Python tests + JS tests) and paste its markdown
+  summary into the PR body. CI runs ruff, the JS tests and the package build on every pull
+  request, but the Python tests need a NetBox installation and therefore run locally only.
 - Docs stay consistent with the change (`docs/`, ADRs).
 - User-visible changes get an entry in `CHANGELOG.md` under `[Unreleased]`
   (`Added` / `Changed` / `Fixed` / `Removed`).

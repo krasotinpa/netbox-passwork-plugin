@@ -17,6 +17,7 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 ### Added
 - `LICENSE` (Apache-2.0) and a License section in README
 - Published on PyPI: `pip install netbox-passwork`; `update.sh` now upgrades from PyPI by default
+- GitHub Actions CI (`.github/workflows/ci.yml`): ruff, the JS tests and a package build/`twine check` on every push to `main` and every pull request (the Python tests still run locally — they need a NetBox installation)
 - `scripts/test.sh` — single entry point for lint / Python tests / JS tests with a markdown summary for PRs; `scripts/release.sh` — release preparation (release PR) and publishing (signed tag, sdist/wheel, GitHub Release)
 
 ### Fixed
