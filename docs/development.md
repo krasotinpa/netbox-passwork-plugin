@@ -12,7 +12,7 @@ changes make their way into `main`.
 |---|---|---|
 | Python | ≥ 3.12 | `requires-python` in [pyproject.toml](../pyproject.toml) |
 | NetBox | ≥ 4.5 | `min_version = "4.5"` in [netbox_passwork/config.py](../netbox_passwork/config.py) |
-| PostgreSQL | 13+ | [README.md](../README.md) |
+| PostgreSQL | 14+ | [README.md](../README.md) |
 | Passwork | 7.6+ (CSE off) | [README.md](../README.md) |
 
 The plugin is a NetBox Django plugin, not a standalone application. `pytest.ini` sets
