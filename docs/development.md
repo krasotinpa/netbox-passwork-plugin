@@ -229,9 +229,21 @@ pre-commit install
 pre-commit run --all-files
 ```
 
-**There is no CI configuration in the repository.** Quality checks are local: `pre-commit`,
-`scripts/test.sh all` before opening a PR (its markdown summary goes into the PR body), and the
-release checklist below.
+### Continuous integration
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) runs on every push to `main` and on every
+pull request, with three jobs:
+
+| Job | What it runs |
+|---|---|
+| `ruff` | `scripts/test.sh lint` with `ruff` pinned to the version in `.pre-commit-config.yaml` |
+| `JS tests` | `npm install` + `scripts/test.sh js` (node 22, jsdom) |
+| `build + twine check` | `python -m build` and `twine check dist/*` — validates the package metadata |
+
+**The Python tests are not part of CI**: they run inside a real NetBox installation
+(`DJANGO_SETTINGS_MODULE = netbox.settings`, an existing test database reused via `--reuse-db`),
+which a stock runner does not have. Run `scripts/test.sh all` locally before opening a PR and paste
+its markdown summary into the PR body, together with `pre-commit` and the release checklist below.
 
 ---
 
@@ -303,8 +315,9 @@ deliberately), `--unsigned` (publish with an annotated instead of a signed tag),
 3. After the release PR is merged, refresh `egg-info` on the development machine so that
    `importlib.metadata` reports the new version: `pip install -e . --no-deps --quiet`.
 
-Releases are published locally; if CI is introduced later, `publish` can move into an "on tag push"
-workflow without changing the rest of the process.
+Releases are published locally — the CI workflow deliberately covers checks only. Publishing could
+later move into an "on tag push" workflow (with PyPI Trusted Publishing instead of a token) without
+changing the rest of the process.
 
 ---
 
