@@ -201,11 +201,15 @@ Frontend tests run through `scripts/test.sh js` (or directly with `npm test`, de
 The runner is the built-in `node --test`, with no third-party framework. The only dev dependency
 is `jsdom` (`^25.0.1`), used to emulate the DOM.
 
-The single test file is
-[netbox_passwork/tests/js/xss.test.js](../netbox_passwork/tests/js/xss.test.js): it loads
-`static/netbox_passwork/passwork.js` into a jsdom environment and pushes XSS payloads
-(`<img onerror=...>`, `<script>`, attribute injections) through the plugin's rendering functions,
-asserting that values are always treated as text and never as markup.
+The test files live in [netbox_passwork/tests/js/](../netbox_passwork/tests/js/); each loads
+`static/netbox_passwork/passwork.js` into a jsdom environment:
+
+- [xss.test.js](../netbox_passwork/tests/js/xss.test.js) pushes XSS payloads
+  (`<img onerror=...>`, `<script>`, attribute injections) through the plugin's rendering
+  functions, asserting that values are always treated as text and never as markup.
+- [auth_button.test.js](../netbox_passwork/tests/js/auth_button.test.js) checks that the tab
+  header switches between the "Bind secret" and "Authenticate" buttons based on the 401 signal
+  from the secrets endpoints.
 
 ---
 

@@ -19,6 +19,7 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ### Fixed
 - README: the minimum PostgreSQL version is 14, as required by NetBox 4.5 (13 was stated)
+- Secrets tab: with no active Passwork session the header button now reads "Authenticate" and opens the login modal directly, instead of "Bind secret" leading into a picker that can only fail with 401; after a successful login (including TOTP) it switches back to "Bind secret"
 
 ## [1.3.1] — 2026-08-19
 

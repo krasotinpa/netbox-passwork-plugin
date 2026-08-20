@@ -93,6 +93,16 @@ async function pwFetch(url, options = {}) {
 // Tab loading
 // ---------------------------------------------------------------------------
 
+// Header button mirrors the auth state: with no Passwork session the card
+// shows "Authenticate" (opens the login modal) instead of "Bind secret".
+function pwSetAuthButton(authenticated) {
+    const bindBtn = document.getElementById('pw-bind-btn');
+    const authBtn = document.getElementById('pw-auth-btn');
+    if (!bindBtn || !authBtn) return;
+    bindBtn.style.display = authenticated ? '' : 'none';
+    authBtn.style.display = authenticated ? 'none' : '';
+}
+
 async function pwLoadSecretsTab() {
     const loading = document.getElementById('pw-loading');
     const empty   = document.getElementById('pw-empty');
@@ -124,12 +134,15 @@ async function pwLoadSecretsTab() {
         authReq.style.display = '';
         table.style.display   = 'none';
         empty.style.display   = 'none';
+        pwSetAuthButton(false);
         return;
     }
     if (!resp.ok) {
+        // Non-401 error: the auth state is unknown — leave the button as is
         empty.style.display = '';
         return;
     }
+    pwSetAuthButton(true);
 
     const items = await resp.json();
 
@@ -151,6 +164,7 @@ async function pwLoadSecretsTab() {
             authReq.style.display = '';
             table.style.display   = 'none';
             empty.style.display   = 'none';
+            pwSetAuthButton(false);
             return;
         }
     }
@@ -223,6 +237,7 @@ async function pwLoadSecretMeta(pwId) {
             // Show the global authentication block
             const authReq = document.getElementById('pw-auth-required');
             if (authReq) authReq.style.display = '';
+            pwSetAuthButton(false);
             return;
         }
         if (resp.status === 403) { pwMarkRowNoAccess(pwId); return; }
@@ -523,6 +538,9 @@ async function pwCopyField(pwId, field) {
 // ---------------------------------------------------------------------------
 
 function pwShowLoginModal() {
+    // The login modal opens exactly when there is no Passwork session —
+    // sync the header button (covers mid-use 401s in reveal/copy too).
+    pwSetAuthButton(false);
     pwHideModal('pw-totp-modal');
     pwShowModal('pw-login-modal');
     // Focus the username field
