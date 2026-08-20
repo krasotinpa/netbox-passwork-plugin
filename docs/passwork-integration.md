@@ -7,7 +7,7 @@ API: the client, the login and 2FA flow, token refresh, secret retrieval, helper
 Key files:
 
 - [gateway.py](../netbox_passwork/gateway.py) — the Passwork gateway (ADR-0001): the Passwork
-  session (Fernet encryption, storage in the Django session, renewal) and six operations.
+  session (Fernet encryption, storage in the Django session, renewal) and seven operations.
 - [passwork_client.py](../netbox_passwork/passwork_client.py) — a pure HTTP client for the
   Passwork API, with no Django and no session encryption.
 - [utils.py](../netbox_passwork/utils.py) — helper functions (client IP); no longer involved in
@@ -217,22 +217,37 @@ main password).
 
 ## 5. Other endpoints (picker)
 
-The secret-selection UI used when creating a binding (`PassworkBinding`) relies on two GET
+The secret-selection UI used when creating a binding (`PassworkBinding`) relies on GET
 endpoints of Passwork. The picker views go through the gateway (`PassworkGateway`, ADR-0001),
 which calls the client's public operations:
 
 - **`PickerFoldersView`** (`GET /picker/folders/` in the plugin itself) →
   `PassworkGateway.list_vaults()` → the `list_vaults(session_data)` client method →
-  `GET /api/v1/vaults` — the list of Passwork vaults/folders for the selection tree.
+  `GET /api/v1/vaults` — the list of Passwork vaults for the selection tree.
+- **`PickerFolderContentsView`** (`GET /picker/folders/<vault_id>/items/[?folder_id=...]`) →
+  `PassworkGateway.list_folder_contents(vault_id, folder_id)` → the
+  `list_folder_contents(vault_id, folder_id, session_data)` client method → two Passwork
+  **listing** requests (Api reference §11.5 / §13.6 — not the text search):
+  `GET /api/v1/folders?vaultId=<vault_id>` (the vault's flat folder list, filtered here to the
+  node's direct children by `parentFolderId`, which is `null` at the vault root) and
+  `GET /api/v1/items?vaultId=<vault_id>` for the vault node, or
+  `GET /api/v1/items?vaultId=<vault_id>&folderId=<folder_id>` for a folder node. The response is
+  `{"folders": [{"id", "name"}, ...], "items": [...]}`. For the vault node Passwork returns every
+  password in the vault (so the vault view already shows the passwords of its subfolders); a
+  folder node shows the passwords directly in that folder, and clicking a subfolder drills down.
+  The `folderId`/`parentFolderId` fields and the folder-listing shape are taken from the
+  `Api reference.pdf` shipped inside a Passwork installation
+  (`/var/www/files/api-schema/` on Linux; §11.5 GET /v1/folders, §13.6 GET /v1/items).
 - **`PickerSearchView`** (`GET /picker/search/?q=...` in the plugin) →
   `PassworkGateway.search_items(query)` → the `search_items(query, session_data)` client method →
   `GET /api/v1/items/search?query=<query>` — full-text search over secrets.
 
-Both client operations return a list of `items`, and 401/403 from Passwork are translated into
-`PassworkSessionExpired`/`PassworkAccessDenied` (same as `get_item`).
+The client operations return Passwork's `items` lists, and 401/403 from Passwork are translated
+into `PassworkSessionExpired`/`PassworkAccessDenied` (same as `get_item`).
 
 The search string is encoded with `urllib.parse.quote(query, safe="")` before being substituted
-into the URL — now only inside the client's `search_items`:
+into the URL — only inside the client (`search_items` for the query, `list_folder_contents` for
+the vault/folder ids):
 
 ```python
 f"/api/v1/items/search?query={urllib.parse.quote(query, safe='')}"

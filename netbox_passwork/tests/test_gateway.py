@@ -46,6 +46,8 @@ REFRESH_URL = f"{BASE_URL}/api/v1/sessions/refresh"
 ITEM_URL = f"{BASE_URL}/api/v1/items/pw123"
 VAULTS_URL = f"{BASE_URL}/api/v1/vaults"
 SEARCH_URL = f"{BASE_URL}/api/v1/items/search"
+FOLDERS_URL = f"{BASE_URL}/api/v1/folders"
+ITEMS_URL = f"{BASE_URL}/api/v1/items"
 
 
 def _wrap(data: dict) -> dict:
@@ -548,6 +550,114 @@ class TestReadOperations:
 
 
 # ------------------------------------------------------------------
+# list_folder_contents: subfolders and passwords of a vault/folder
+# ------------------------------------------------------------------
+
+
+def _folders_body():
+    """A flat vault folder tree (Api reference §11.5 shape): parentFolderId links children."""
+    return _wrap(
+        {
+            "items": [
+                {"id": "f1", "name": "Network", "vaultId": "v1", "parentFolderId": None},
+                {"id": "f2", "name": "Nested", "vaultId": "v1", "parentFolderId": "f1"},
+                {"id": "f3", "name": "Deep", "vaultId": "v1", "parentFolderId": "f2"},
+            ]
+        }
+    )
+
+
+class TestListFolderContents:
+    @resp_mock.activate
+    def test_vault_node_returns_root_folders_and_vault_items(self):
+        """Vault node: the vault's root folders (parentFolderId=null) + all the vault's passwords."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_folders_body())
+        resp_mock.add(resp_mock.GET, ITEMS_URL, json=_wrap({"items": [{"id": "pw1", "name": "Router"}]}))
+        gateway, _ = make_gateway(session_data=_session())
+
+        contents = gateway.list_folder_contents("v1")
+
+        assert contents == {
+            "folders": [{"id": "f1", "name": "Network"}],
+            "items": [{"id": "pw1", "name": "Router"}],
+        }
+        folders_url, items_url = (c.request.url for c in resp_mock.calls)
+        assert folders_url == f"{FOLDERS_URL}?vaultId=v1"
+        assert items_url == f"{ITEMS_URL}?vaultId=v1", "vault node lists items with no folderId (whole vault)"
+
+    @resp_mock.activate
+    def test_folder_node_returns_children_and_folder_items(self):
+        """Folder node: only the folder's direct subfolders + the passwords in that folder."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_folders_body())
+        resp_mock.add(resp_mock.GET, ITEMS_URL, json=_wrap({"items": [{"id": "pw2", "name": "Switch"}]}))
+        gateway, _ = make_gateway(session_data=_session())
+
+        contents = gateway.list_folder_contents("v1", "f1")
+
+        assert contents == {
+            "folders": [{"id": "f2", "name": "Nested"}],
+            "items": [{"id": "pw2", "name": "Switch"}],
+        }
+        items_url = resp_mock.calls[1].request.url
+        assert items_url == f"{ITEMS_URL}?vaultId=v1&folderId=f1"
+
+    @resp_mock.activate
+    def test_ids_are_url_encoded(self):
+        """`&`/`=` in the vault/folder ids don't inject query parameters (H1)."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_wrap({"items": []}))
+        resp_mock.add(resp_mock.GET, ITEMS_URL, json=_wrap({"items": []}))
+        gateway, _ = make_gateway(session_data=_session())
+
+        gateway.list_folder_contents("v&1", "f&1")
+
+        folders_url, items_url = (c.request.url for c in resp_mock.calls)
+        assert "v%261" in folders_url and "&1" not in folders_url.split("?", 1)[1]
+        assert "vaultId=v%261" in items_url and "folderId=f%261" in items_url
+
+    @resp_mock.activate
+    def test_passwords_come_from_listing_not_search(self):
+        """Regression (#15): the picker never uses the text-search endpoint — it lists items."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_wrap({"items": []}))
+        resp_mock.add(resp_mock.GET, ITEMS_URL, json=_wrap({"items": []}))
+        gateway, _ = make_gateway(session_data=_session())
+
+        gateway.list_folder_contents("v1")
+
+        assert all("/items/search" not in c.request.url for c in resp_mock.calls)
+
+    @pytest.mark.parametrize(
+        ("status", "exc", "code", "http_status"),
+        [
+            (401, PassworkSessionExpired, "pw_session_expired", 401),
+            (403, PassworkAccessDenied, "pw_access_denied", 403),
+        ],
+    )
+    @resp_mock.activate
+    def test_folders_auth_failure_propagates(self, status, exc, code, http_status):
+        """A 401/403 on the folder listing surfaces as the uniform Passwork error (no degradation)."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_wrap({"errors": []}), status=status)
+        gateway, gw_storage = make_gateway(session_data=_session())
+        with _assert_raises(exc, code, http_status):
+            gateway.list_folder_contents("v1")
+        if status == 401:
+            assert STORAGE_KEY in gw_storage, "a 401 from an operation does not delete the record"
+
+    @resp_mock.activate
+    def test_items_bad_response_propagates(self):
+        """A non-JSON response on the item listing surfaces as pw_bad_response."""
+        resp_mock.add(resp_mock.GET, FOLDERS_URL, json=_wrap({"items": []}))
+        resp_mock.add(resp_mock.GET, ITEMS_URL, body="<html>502</html>", status=502)
+        gateway, _ = make_gateway(session_data=_session())
+        with _assert_raises(PassworkBadResponse, "pw_bad_response", 502):
+            gateway.list_folder_contents("v1")
+
+    def test_without_record_raises_not_authenticated(self):
+        gateway, _ = make_gateway()
+        with _assert_raises(PassworkError, "pw_not_authenticated", 401):
+            gateway.list_folder_contents("v1")
+
+
+# ------------------------------------------------------------------
 # Building the gateway per request — the single composition point
 # ------------------------------------------------------------------
 
@@ -606,13 +716,14 @@ class TestFakeGatewayInterface:
     def test_same_public_operations_and_parameters(self):
         assert _public_operations(FakeGateway) == _public_operations(PassworkGateway)
 
-    def test_exactly_six_operations(self):
+    def test_exactly_seven_operations(self):
         assert set(_public_operations(PassworkGateway)) == {
             "login",
             "confirm_totp",
             "get_item",
             "list_vaults",
             "search_items",
+            "list_folder_contents",
             "require_session",
         }
 
@@ -623,6 +734,7 @@ class TestFakeGatewayInterface:
         assert fake.get_item("x") == {}
         assert fake.list_vaults() == []
         assert fake.search_items("q") == []
+        assert fake.list_folder_contents("v1") == {"folders": [], "items": []}
         assert fake.require_session() is None
         assert [c[0] for c in fake.calls] == [
             "login",
@@ -630,6 +742,7 @@ class TestFakeGatewayInterface:
             "get_item",
             "list_vaults",
             "search_items",
+            "list_folder_contents",
             "require_session",
         ]
 

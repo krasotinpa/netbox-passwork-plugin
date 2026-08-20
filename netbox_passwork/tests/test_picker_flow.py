@@ -27,6 +27,7 @@ from netbox_passwork.views import (
     BindingsCreateView,
     BindingsDeleteView,
     PassworkLoginView,
+    PickerFolderContentsView,
     PickerFoldersView,
     PickerSearchView,
 )
@@ -144,11 +145,11 @@ class TestLoginThenPickerViaGateway:
         request.session = self.session
         return PassworkLoginView.as_view()(request)
 
-    def _get(self, view_class, path, user, params=None):
+    def _get(self, view_class, path, user, params=None, **view_kwargs):
         request = self.factory.get(path, params or {})
         request.user = user
         request.session = self.session
-        return view_class.as_view()(request)
+        return view_class.as_view()(request, **view_kwargs)
 
     @resp_mock.activate
     def test_login_then_folders_and_search(self, user):
@@ -179,6 +180,41 @@ class TestLoginThenPickerViaGateway:
         assert parse_qs(urlsplit(search_call.url).query) == {"query": ["core router&perPage=9999"]}, (
             "the request reached Passwork as a single URL-encoded parameter (H1)"
         )
+
+    @resp_mock.activate
+    def test_login_then_folder_contents(self, user):
+        """Login → GET /picker/folders/<vault>/items/?folder_id=... — subfolders from /api/v1/folders
+        (vaultId=..., filtered by parentFolderId) and passwords from /api/v1/items (vaultId+folderId),
+        one real gateway; the text-search endpoint is never touched."""
+        grant_netbox_perm(user, "add_binding")
+        mock_passwork_login()
+        resp_mock.add(
+            resp_mock.GET,
+            f"{PASSWORK_URL}/api/v1/folders",
+            json=wrap_passwork_response(
+                {
+                    "items": [
+                        {"id": "f1", "name": "Network", "vaultId": "v1", "parentFolderId": None},
+                        {"id": "f2", "name": "Nested", "vaultId": "v1", "parentFolderId": "f1"},
+                    ]
+                }
+            ),
+        )
+        resp_mock.add(resp_mock.GET, f"{PASSWORK_URL}/api/v1/items", json=wrap_passwork_response({"items": FOUND}))
+
+        with override_settings(PLUGINS_CONFIG=self.PLUGIN_CONFIG):
+            assert self._login(user).status_code == 200
+            resp = self._get(
+                PickerFolderContentsView, "/picker/folders/v1/items/", user, {"folder_id": "f1"}, vault_id="v1"
+            )
+
+        assert resp.status_code == 200, resp.content
+        assert json.loads(resp.content) == {"folders": [{"id": "f2", "name": "Nested"}], "items": FOUND}
+        folders_call, items_call = resp_mock.calls[-2].request, resp_mock.calls[-1].request
+        assert folders_call.headers["Authorization"] == "Bearer acc1", "contents read the tokens saved by login"
+        assert parse_qs(urlsplit(folders_call.url).query) == {"vaultId": ["v1"]}
+        assert parse_qs(urlsplit(items_call.url).query) == {"vaultId": ["v1"], "folderId": ["f1"]}
+        assert not any("/items/search" in c.request.url for c in resp_mock.calls)
 
     @resp_mock.activate
     def test_passwork_401_in_picker_maps_to_session_expired(self, user):

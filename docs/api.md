@@ -18,6 +18,7 @@ Every response is `application/json` (`django.http.JsonResponse`).
 | POST | `bindings/` | `BindingsCreateView` | `add_binding` (`netbox_passwork.add_binding_passworkbinding`) | Create a binding between a Passwork item and a NetBox object |
 | DELETE | `bindings/<int:binding_id>/` | `BindingsDeleteView` | `delete_binding` (`netbox_passwork.delete_binding_passworkbinding`) | Delete a binding (hard delete; the event is recorded in NetBox's standard changelog) |
 | GET | `picker/folders/` | `PickerFoldersView` | `add_binding` | List Passwork vaults — through the gateway (`PassworkGateway.list_vaults()` → `/api/v1/vaults`) |
+| GET | `picker/folders/<str:vault_id>/items/` | `PickerFolderContentsView` | `add_binding` | Contents of a vault, or of one of its folders with `?folder_id=...`: `{"folders": [direct subfolders], "items": [passwords]}` — through the gateway (`PassworkGateway.list_folder_contents()` → `/api/v1/folders?vaultId=...` + `/api/v1/items?vaultId=...[&folderId=...]`) |
 | GET | `picker/search/` | `PickerSearchView` | `add_binding` | Search Passwork items by string — through the gateway (`PassworkGateway.search_items()` → `/api/v1/items/search`) |
 | GET | `audit/` | `AuditLogView` | `view_auditlog` | Audit log of `reveal`/`copy` actions performed on secrets |
 
