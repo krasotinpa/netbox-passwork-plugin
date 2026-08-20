@@ -148,6 +148,34 @@ for action, name in [
 
 ---
 
+## Screenshots
+
+The **Passwork** tab on a device: bound secrets live here, and there is nothing to see until a
+secret is bound.
+
+![Passwork tab on a device](docs/img/screenshot-passwork-tab.png)
+
+Binding a secret opens the picker. Passwork is authenticated separately from NetBox, so the first
+action asks for a login.
+
+![Secret picker asking for a Passwork login](docs/img/screenshot-picker-login-required.png)
+
+The login runs against Passwork; the credentials never touch NetBox's own user database.
+
+![Passwork login modal](docs/img/screenshot-login-modal.png)
+
+If the Passwork account has two-factor authentication enabled, the plugin asks for the code.
+
+![Two-factor authentication modal](docs/img/screenshot-totp-modal.png)
+
+Once bound, the secrets of an object are listed with their fields. Passwords stay masked until the
+user with the `reveal_secret` permission reveals or copies them — and both actions are recorded in
+the audit log.
+
+![Secrets bound to a device](docs/img/screenshot-secrets.png)
+
+---
+
 ## Features
 
 - **Passwork tab** on Device, VM, and Service pages

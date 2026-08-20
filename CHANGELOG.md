@@ -7,6 +7,9 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 ## [Unreleased]
 
 ### Added
+- README: a Screenshots section walking through the plugin — the Passwork tab, the secret picker asking for a login, the login and two-factor modals, and the secrets of a bound object
+
+### Added
 - CI runs the Python test suite against a real NetBox (PostgreSQL + Redis service containers, matrix of NetBox 4.5/4.6 × Python 3.12/3.14), plus `makemigrations --check` and `manage.py check`
 - `testing/configuration.py` — a ready-made NetBox configuration for running the test suite, used by CI and usable locally
 - README: a compatibility matrix (plugin ↔ NetBox ↔ Python), the runtime dependency list, a Support section (where to report bugs, how to report a vulnerability privately) and a plugin icon (`docs/img/icon.svg`, CC BY 4.0)
