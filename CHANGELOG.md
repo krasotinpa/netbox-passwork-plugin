@@ -20,6 +20,7 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 ### Fixed
 - README: the minimum PostgreSQL version is 14, as required by NetBox 4.5 (13 was stated)
 - Secrets tab: with no active Passwork session the header button now reads "Authenticate" and opens the login modal directly, instead of "Bind secret" leading into a picker that can only fail with 401; after a successful login (including TOTP) it switches back to "Bind secret"
+- Picker: clicking a vault in the *Bind Passwork secret* modal now shows its contents in the right pane — subfolders (with drill-down) and passwords — instead of sending the folder ID to the text search and always showing "No secrets found" (new endpoint `GET picker/folders/<vault_id>/items/`, backed by Passwork's `/api/v1/folders` and `/api/v1/items` listing endpoints)
 
 ## [1.3.1] — 2026-08-19
 

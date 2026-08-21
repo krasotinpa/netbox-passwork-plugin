@@ -18,3 +18,4 @@ package-lock.json
 # IDE / editor
 .idea/
 .vscode/
+docs/Api reference.pdf

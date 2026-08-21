@@ -17,6 +17,7 @@ from netbox_passwork.tests.conftest import FakeGateway, grant_netbox_perm, no_pa
 from netbox_passwork.views import (
     PassworkLoginView,
     PassworkTotpView,
+    PickerFolderContentsView,
     PickerFoldersView,
     PickerSearchView,
     SecretCopyView,
@@ -862,3 +863,87 @@ class TestPickerSearchView:
         assert PickerSearchView.gateway_factory is build_gateway
         assert PickerSearchView.permission_required == "add_binding"
         assert PickerSearchView.requires_passwork_session is True
+
+
+CONTENTS = {"folders": [{"id": "f1", "name": "Network"}], "items": FOUND}
+
+
+@pytest.mark.django_db
+class TestPickerFolderContentsView:
+    """
+    GET /picker/folders/<vault_id>/items/[?folder_id=...] via the gateway: 401 NetBox → 403 permission
+    add_binding → 401 Passwork session → list_folder_contents(vault_id, folder_id). The successful body is
+    {"folders": [...], "items": [...]}; Passwork failures — {"code","detail"} with the status from the exception.
+    """
+
+    def setup_method(self):
+        self.factory = RequestFactory()
+
+    def _get(self, user, params=None):
+        query = f"?{urlencode(params)}" if params else ""
+        request = self.factory.get(f"/picker/folders/v1/items/{query}")
+        request.user = user
+        request.session = {}
+        return request
+
+    def _view(self, fake=None):
+        return PickerFolderContentsView.as_view(gateway_factory=lambda request: fake or FakeGateway())
+
+    def test_unauthenticated_returns_401_before_gateway(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        resp = PickerFolderContentsView.as_view(gateway_factory=_never_called)(
+            self._get(AnonymousUser()), vault_id="v1"
+        )
+        assert resp.status_code == 401
+        assert json.loads(resp.content)["code"] == "not_authenticated"
+
+    def test_no_permission_returns_403_before_gateway(self, user):
+        resp = PickerFolderContentsView.as_view(gateway_factory=_never_called)(self._get(user), vault_id="v1")
+        assert resp.status_code == 403
+        assert json.loads(resp.content)["code"] == "netbox_permission_denied"
+
+    def test_no_passwork_session_returns_401(self, user):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(require_session=no_passwork_session())
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == 401
+        assert json.loads(resp.content) == {"code": "pw_not_authenticated", "detail": "Passwork session not found"}
+        assert fake.calls == [("require_session",)], "list_folder_contents was not called"
+
+    @pytest.mark.parametrize("exc, status, code", PASSWORK_FAILURES)
+    def test_passwork_error_maps_to_status_and_code(self, user, exc, status, code):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_folder_contents=exc)
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == status
+        assert json.loads(resp.content) == {"code": code, "detail": exc.detail}
+        assert fake.calls == [("require_session",), ("list_folder_contents", "v1", None)]
+
+    def test_vault_node_returns_contents(self, user):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_folder_contents=CONTENTS)
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == 200
+        assert json.loads(resp.content) == CONTENTS
+        assert fake.calls == [("require_session",), ("list_folder_contents", "v1", None)]
+
+    def test_folder_id_is_passed_to_the_gateway(self, user):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_folder_contents=CONTENTS)
+        resp = self._view(fake)(self._get(user, params={"folder_id": "f1"}), vault_id="v1")
+        assert resp.status_code == 200
+        assert fake.calls == [("require_session",), ("list_folder_contents", "v1", "f1")]
+
+    @pytest.mark.parametrize("params", [{}, {"folder_id": ""}, {"folder_id": "   "}])
+    def test_blank_folder_id_means_vault_node(self, user, params):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_folder_contents=CONTENTS)
+        resp = self._view(fake)(self._get(user, params=params), vault_id="v1")
+        assert resp.status_code == 200
+        assert fake.calls == [("require_session",), ("list_folder_contents", "v1", None)]
+
+    def test_default_gateway_factory_is_build_gateway(self):
+        assert PickerFolderContentsView.gateway_factory is build_gateway
+        assert PickerFolderContentsView.permission_required == "add_binding"
+        assert PickerFolderContentsView.requires_passwork_session is True

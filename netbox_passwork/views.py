@@ -374,6 +374,20 @@ class PickerFoldersView(PassworkView):
         return JsonResponse(self.gateway.list_vaults(), safe=False)
 
 
+class PickerFolderContentsView(PassworkView):
+    """
+    GET /picker/folders/<vault_id>/items/[?folder_id=...] — direct subfolders and passwords of a
+    Passwork vault (or of one of its folders); body — {"folders": [...], "items": [...]}.
+    """
+
+    permission_required = "add_binding"
+
+    def get(self, request, vault_id):
+        folder_id = request.GET.get("folder_id", "").strip() or None
+        # Passwork failures (401/403/504/502) are turned into {"code","detail"} by the base view
+        return JsonResponse(self.gateway.list_folder_contents(vault_id, folder_id))
+
+
 class PickerSearchView(PassworkView):
     """GET /picker/search/?q=... — search Passwork items; body — array of found items."""
 

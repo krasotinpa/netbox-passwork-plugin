@@ -693,7 +693,7 @@ async function pwLoadPickerFolders() {
         item.className = 'p-2 border-bottom cursor-pointer';
         item.style.cursor = 'pointer';
         item.textContent = folder.name || folder.id;
-        item.onclick = () => pwLoadPickerSecrets(folder.id);
+        item.onclick = () => pwLoadPickerContents(folder.id, null);
         tree.appendChild(item);
     });
     if (!tree.children.length) {
@@ -701,12 +701,40 @@ async function pwLoadPickerFolders() {
     }
 }
 
-async function pwLoadPickerSecrets(folderId) {
+async function pwLoadPickerContents(vaultId, folderId) {
     const list = document.getElementById('pw-picker-list');
     list.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
-    const resp = await pwFetch(`${PW_API_BASE}/picker/search/?q=${encodeURIComponent(folderId)}`);
+    let url = `${PW_API_BASE}/picker/folders/${encodeURIComponent(vaultId)}/items/`;
+    if (folderId) url += `?folder_id=${encodeURIComponent(folderId)}`;
+    const resp = await pwFetch(url);
     if (!resp.ok) { list.innerHTML = '<div class="text-muted p-2">Failed to load secrets.</div>'; return; }
-    pwRenderPickerSecrets(await resp.json());
+    const data = await resp.json();
+    pwRenderPickerContents(vaultId, data.folders || [], data.items || []);
+}
+
+function pwRenderPickerContents(vaultId, folders, secrets) {
+    const list = document.getElementById('pw-picker-list');
+    list.innerHTML = '';
+    if (!folders.length && !secrets.length) {
+        list.innerHTML = '<div class="text-muted p-2">Folder is empty.</div>';
+        return;
+    }
+    folders.forEach(folder => {
+        const item = document.createElement('div');
+        item.className = 'p-2 border-bottom d-flex align-items-center';
+        item.style.cursor = 'pointer';
+
+        const icon = document.createElement('i');
+        icon.className = 'mdi mdi-folder-outline me-2';
+
+        const name = document.createElement('span');
+        name.textContent = folder.name || folder.id;
+
+        item.append(icon, name);
+        item.onclick = () => pwLoadPickerContents(vaultId, folder.id);
+        list.appendChild(item);
+    });
+    secrets.forEach(secret => list.appendChild(pwPickerSecretRow(secret)));
 }
 
 async function pwPickerSearch(query) {
@@ -719,34 +747,36 @@ async function pwPickerSearch(query) {
     pwRenderPickerSecrets(Array.isArray(data) ? data : []);
 }
 
+function pwPickerSecretRow(secret) {
+    const item = document.createElement('div');
+    item.className = 'p-2 border-bottom d-flex justify-content-between align-items-center';
+
+    const info = document.createElement('div');
+
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'fw-semibold';
+    nameDiv.textContent = secret.name || secret.id;
+
+    const loginSmall = document.createElement('small');
+    loginSmall.className = 'text-muted';
+    loginSmall.textContent = secret.login || '';
+
+    info.append(nameDiv, loginSmall);
+
+    const bindBtn = document.createElement('button');
+    bindBtn.className = 'btn btn-sm btn-primary';
+    bindBtn.innerHTML = '<i class="mdi mdi-link-variant"></i> Bind';
+    bindBtn.addEventListener('click', () => pwCreateBinding(secret.id));
+
+    item.append(info, bindBtn);
+    return item;
+}
+
 function pwRenderPickerSecrets(secrets) {
     const list = document.getElementById('pw-picker-list');
     list.innerHTML = '';
     if (!secrets.length) { list.innerHTML = '<div class="text-muted p-2">No secrets found.</div>'; return; }
-    secrets.forEach(secret => {
-        const item = document.createElement('div');
-        item.className = 'p-2 border-bottom d-flex justify-content-between align-items-center';
-
-        const info = document.createElement('div');
-
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'fw-semibold';
-        nameDiv.textContent = secret.name || secret.id;
-
-        const loginSmall = document.createElement('small');
-        loginSmall.className = 'text-muted';
-        loginSmall.textContent = secret.login || '';
-
-        info.append(nameDiv, loginSmall);
-
-        const bindBtn = document.createElement('button');
-        bindBtn.className = 'btn btn-sm btn-primary';
-        bindBtn.innerHTML = '<i class="mdi mdi-link-variant"></i> Bind';
-        bindBtn.addEventListener('click', () => pwCreateBinding(secret.id));
-
-        item.append(info, bindBtn);
-        list.appendChild(item);
-    });
+    secrets.forEach(secret => list.appendChild(pwPickerSecretRow(secret)));
 }
 
 // ---------------------------------------------------------------------------

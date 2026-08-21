@@ -116,9 +116,9 @@ The test modules and what they cover:
 | File | Classes | What it checks |
 |---|---|---|
 | [test_auth.py](../netbox_passwork/tests/test_auth.py) | `TestLogin`, `TestConfirmTotp`, `TestRefreshIfNeeded`, `TestGetItem`, `TestListVaults`, `TestSearchItems`, `TestClientIsPureHttp`, `TestDecode` | `PassworkAuthClient` on `responses`: login, TOTP (2FA) confirmation, token refresh (including 401/403 from `/sessions/refresh` → session expired), fetching an item, listing vaults, search (including the regression test for URL-encoding the query), absence of Django/local imports and of `disable_warnings()` at import time, `_decode` on a stub response |
-| [test_gateway.py](../netbox_passwork/tests/test_gateway.py) | `TestStorageCompatibility`, `TestLogin`, `TestConfirmTotp`, `TestRequireSession`, `TestReadOperations`, `TestBuildGateway`, `TestFakeGatewayInterface` | `PassworkGateway` on a dict storage and a client on `responses`: record compatibility with the ≤1.2.x format (a literal Fernet oracle), login/TOTP, refresh and refusals (401/403 from refresh, `InvalidToken`, timeout/non-JSON), reading the record once per gateway, read operations, `build_gateway`, interface parity with `FakeGateway` |
+| [test_gateway.py](../netbox_passwork/tests/test_gateway.py) | `TestStorageCompatibility`, `TestLogin`, `TestConfirmTotp`, `TestRequireSession`, `TestReadOperations`, `TestListFolderContents`, `TestBuildGateway`, `TestFakeGatewayInterface` | `PassworkGateway` on a dict storage and a client on `responses`: record compatibility with the ≤1.2.x format (a literal Fernet oracle), login/TOTP, refresh and refusals (401/403 from refresh, `InvalidToken`, timeout/non-JSON), reading the record once per gateway, read operations, folder contents (subfolder filtering, search scope, degradation to passwords-only), `build_gateway`, interface parity with `FakeGateway` |
 | [test_passwork_view.py](../netbox_passwork/tests/test_passwork_view.py) | `TestDispatchOrder`, `TestPermissionRequiredNone`, `TestRequiresPassworkSessionFalse`, `TestPassworkErrorToJson`, `TestSeam` | The base `PassworkView` ([ADR-0001](adr/0001-passwork-gateway-not-middleware.md)): order of checks (NetBox 401 → 403 → 405 → Passwork 401 → the view method), `OPTIONS` without a Passwork session check, `permission_required = None`, `requires_passwork_session = False`, translation of `PassworkError`/`ApiError` into `{"code","detail"}` |
-| [test_proxy.py](../netbox_passwork/tests/test_proxy.py) | `TestSecretsListView`, `TestSecretDetailView`, `TestSecretCopyView`, `TestPassworkLoginView`, `TestPassworkTotpView`, `TestBindingsCreateView`, `TestBindingsDeleteView`, `TestPickerFoldersView`, `TestPickerSearchView` | The largest module — the HTTP views from `views.py`: secret list/detail/copy, login/TOTP, creating and deleting bindings, the picker (search/folders). Every gateway-based view (Login/Totp/Detail/Copy/Picker) is tested against `FakeGateway` through the `as_view(gateway_factory=...)` seam: order of checks, gateway calls; the picker returns Passwork 401/403 instead of 200. All errors use the uniform `{"code","detail"}` body |
+| [test_proxy.py](../netbox_passwork/tests/test_proxy.py) | `TestSecretsListView`, `TestSecretDetailView`, `TestSecretCopyView`, `TestPassworkLoginView`, `TestPassworkTotpView`, `TestBindingsCreateView`, `TestBindingsDeleteView`, `TestPickerFoldersView`, `TestPickerFolderContentsView`, `TestPickerSearchView` | The largest module — the HTTP views from `views.py`: secret list/detail/copy, login/TOTP, creating and deleting bindings, the picker (search/folders/folder contents). Every gateway-based view (Login/Totp/Detail/Copy/Picker) is tested against `FakeGateway` through the `as_view(gateway_factory=...)` seam: order of checks, gateway calls; the picker returns Passwork 401/403 instead of 200. All errors use the uniform `{"code","detail"}` body |
 | [test_binding.py](../netbox_passwork/tests/test_binding.py) | `TestPassworkBindingCreate`, `TestPassworkBindingStr` | The `PassworkBinding` model: creation, hard delete, `__str__` |
 | [test_binding_unique.py](../netbox_passwork/tests/test_binding_unique.py) | `TestPassworkBindingUnique` | The binding uniqueness constraint |
 | [test_changelog.py](../netbox_passwork/tests/test_changelog.py) | `TestBindingChangelog` | The built-in NetBox changelog: creating/deleting a binding through the full HTTP stack (`django.test.Client`) produces `core.ObjectChange` records; saving outside a request does not |
@@ -127,7 +127,7 @@ The test modules and what they cover:
 | [test_exceptions.py](../netbox_passwork/tests/test_exceptions.py) | `TestExceptions` | The exception hierarchy: the base `PassworkError` (`code`, `http_status`, `detail`), the defaults of its four subclasses (`PassworkAccessDenied`, `PassworkTimeout`, `PassworkBadResponse`, `PassworkSessionExpired`), contextual `code` override per operation |
 | [test_utils.py](../netbox_passwork/tests/test_utils.py) | `TestGetClientIp` | The `get_client_ip()` helper |
 | [test_full_flow.py](../netbox_passwork/tests/test_full_flow.py) | `TestFullFlow`, `TestLoginThenSecretsViaGateway`, `TestReleaseScenarioViaGateway` | End-to-end scenarios: tab → lazy load → reveal → `AuditLog` record (Passwork replaced by `FakeGateway`); a full scenario on the real `build_gateway` and `responses`: login (with and without TOTP) → detail/reveal → copy, with both actions audited; `TestReleaseScenarioViaGateway` walks the release scenario on the real `build_gateway`: login → TOTP → list → reveal → copy → picker → binding |
-| [test_picker_flow.py](../netbox_passwork/tests/test_picker_flow.py) | `TestPickerFlow`, `TestLoginThenPickerViaGateway` | The picker through the gateway — 401 without a Passwork session or with an expired one, search (`FakeGateway`) → binding creation → database check, duplicate/delete/re-bind; a full scenario on the real `build_gateway` and `responses`: login → vaults/search (Bearer/CSRF from the stored session), Passwork 401/403 → 401/403 |
+| [test_picker_flow.py](../netbox_passwork/tests/test_picker_flow.py) | `TestPickerFlow`, `TestLoginThenPickerViaGateway` | The picker through the gateway — 401 without a Passwork session or with an expired one, search (`FakeGateway`) → binding creation → database check, duplicate/delete/re-bind; a full scenario on the real `build_gateway` and `responses`: login → vaults/folder contents/search (Bearer/CSRF from the stored session), Passwork 401/403 → 401/403 |
 | [test_security.py](../netbox_passwork/tests/test_security.py) | `TestSecurityHardening` | Security-hardening tests |
 
 Fixtures in [conftest.py](../netbox_passwork/tests/conftest.py):
@@ -143,7 +143,7 @@ Fixtures in [conftest.py](../netbox_passwork/tests/conftest.py):
   it uses the existing test database instead of recreating it on every run (paired with
   `--reuse-db`).
 - `FakeGateway(**outcomes)` — not a pytest fixture but a class; a programmable Passwork gateway for
-  view tests with the same six operations as `PassworkGateway` (interface parity is checked by
+  view tests with the same seven operations as `PassworkGateway` (interface parity is checked by
   `TestFakeGatewayInterface` in `test_gateway.py`). `outcomes` maps an operation name to its
   result — a value is returned, an exception instance is raised; calls accumulate in `fake.calls`.
 - `no_passwork_session()` — a ready-made `PassworkError` ("no record", 401 `pw_not_authenticated`)
@@ -210,6 +210,10 @@ The test files live in [netbox_passwork/tests/js/](../netbox_passwork/tests/js/)
 - [auth_button.test.js](../netbox_passwork/tests/js/auth_button.test.js) checks that the tab
   header switches between the "Bind secret" and "Authenticate" buttons based on the 401 signal
   from the secrets endpoints.
+- [picker_contents.test.js](../netbox_passwork/tests/js/picker_contents.test.js) checks the
+  picker's right pane: a vault click loads `/picker/folders/<vault_id>/items/` (not a text
+  search by folder ID), subfolders render with drill-down, empty contents show a hint, folder
+  names are treated as text, and the search box still goes through `/picker/search/`.
 
 ---
 

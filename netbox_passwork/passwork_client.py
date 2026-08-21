@@ -261,3 +261,31 @@ class PassworkAuthClient:
     def search_items(self, query: str, session_data: dict) -> list:
         """Search items; the query is URL-encoded (H1: `&`/`=` don't inject parameters)."""
         return self._get_items(f"/api/v1/items/search?query={urllib.parse.quote(query, safe='')}", session_data)
+
+    def list_folder_contents(self, vault_id: str, folder_id: str | None, session_data: dict) -> dict:
+        """
+        Direct subfolders and passwords of a vault (``folder_id is None``) or of one of its folders:
+        ``{"folders": [{"id", "name"}, ...], "items": [<Passwork items>]}``.
+
+        Both come from listing endpoints (Api reference §11.5/§13.6), not from text search:
+
+        - subfolders — ``GET /api/v1/folders?vaultId=...`` (the vault's flat folder list),
+          filtered here to the node's direct children by ``parentFolderId`` (``null`` for the
+          root of the vault);
+        - passwords — ``GET /api/v1/items?vaultId=...``, adding ``&folderId=...`` for a folder
+          node. For the vault node (no ``folderId``) Passwork returns every password in the
+          vault, so the vault view already shows the passwords of its subfolders; a folder node
+          shows the passwords directly in that folder (drill into a subfolder for the rest).
+        """
+        vault_q = urllib.parse.quote(vault_id, safe="")
+        folders = self._get_items(f"/api/v1/folders?vaultId={vault_q}", session_data)
+        children = [
+            {"id": f.get("id", ""), "name": f.get("name", "")}
+            for f in folders
+            if isinstance(f, dict) and (f.get("parentFolderId") or None) == folder_id
+        ]
+        items_path = f"/api/v1/items?vaultId={vault_q}"
+        if folder_id:
+            items_path += f"&folderId={urllib.parse.quote(folder_id, safe='')}"
+        items = self._get_items(items_path, session_data)
+        return {"folders": children, "items": items}

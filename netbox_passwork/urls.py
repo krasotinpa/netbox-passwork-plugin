@@ -15,6 +15,11 @@ urlpatterns = [
     path("bindings/<int:binding_id>/", views.BindingsDeleteView.as_view(), name="pw_bindings_delete"),
     # Picker
     path("picker/folders/", views.PickerFoldersView.as_view(), name="pw_picker_folders"),
+    path(
+        "picker/folders/<str:vault_id>/items/",
+        views.PickerFolderContentsView.as_view(),
+        name="pw_picker_folder_items",
+    ),
     path("picker/search/", views.PickerSearchView.as_view(), name="pw_picker_search"),
     # Audit
     path("audit/", views.AuditLogView.as_view(), name="pw_audit"),
