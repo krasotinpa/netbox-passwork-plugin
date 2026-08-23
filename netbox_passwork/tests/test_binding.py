@@ -27,9 +27,12 @@ class TestPassworkBindingCreate:
 
 @pytest.mark.django_db
 class TestPassworkBindingStr:
-    def test_str_binding_fallback(self, binding):
+    def test_str_binding_fallback(self, user):
         # No real object with this id exists in the test DB → technical fallback
-        assert str(binding) == "device:1 → abc123"
+        orphan = PassworkBinding.objects.create(
+            object_type="device", object_id=424242, passwork_item_id="pw_orphan", created_by=user
+        )
+        assert str(orphan) == "device:424242 → pw_orphan"
 
     def test_str_binding_resolved_name(self, user):
         # When a real object exists, str() shows its name, not device:<id>
@@ -67,9 +70,12 @@ class TestPassworkBindingStr:
         )
         assert b.get_absolute_url() == device.get_absolute_url()
 
-    def test_get_absolute_url_missing_object(self, binding):
+    def test_get_absolute_url_missing_object(self, user):
         # No real object → no link (the column renders plain text)
-        assert binding.get_absolute_url() is None
+        orphan = PassworkBinding.objects.create(
+            object_type="device", object_id=424242, passwork_item_id="pw_orphan", created_by=user
+        )
+        assert orphan.get_absolute_url() is None
 
     def test_serialize_object_created_by_format(self, binding, user):
         data = binding.serialize_object()

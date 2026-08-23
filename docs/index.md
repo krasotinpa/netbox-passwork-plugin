@@ -15,7 +15,7 @@ are stored encrypted in the server-side Django session.
 - [passwork-integration.md](passwork-integration.md) — Passwork API integration (auth, tokens, session encryption)
 - [security.md](security.md) — security model and known limitations
 - [development.md](development.md) — development, tests, releases
-- [adr/](adr/) — architecture decision records (currently one: [0001](adr/0001-passwork-gateway-not-middleware.md) — Passwork gateway instead of a middleware mixin)
+- [adr/](adr/) — architecture decision records ([0001](adr/0001-passwork-gateway-not-middleware.md) — Passwork gateway instead of a middleware mixin; [0002](adr/0002-object-level-permissions.md) — object-level permissions for secret access, 404 for out-of-constraint objects)
 
 ## Change process
 

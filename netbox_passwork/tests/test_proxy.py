@@ -13,7 +13,12 @@ from netbox_passwork.exceptions import (
 )
 from netbox_passwork.gateway import build_gateway
 from netbox_passwork.models import PassworkAuditLog, PassworkBinding
-from netbox_passwork.tests.conftest import FakeGateway, grant_netbox_perm, no_passwork_session
+from netbox_passwork.tests.conftest import (
+    FakeGateway,
+    grant_netbox_perm,
+    grant_view_device,
+    no_passwork_session,
+)
 from netbox_passwork.views import (
     PassworkLoginView,
     PassworkTotpView,
@@ -51,6 +56,7 @@ class TestSecretsListView:
 
     def test_returns_binding_list(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         request = self.factory.get("/secrets/", {"object_type": "device", "object_id": "1"})
         request.user = user
         resp = self.view(request)
@@ -170,6 +176,7 @@ class TestSecretDetailView:
     def test_binding_not_found_returns_404(self, user, binding):
         """pw_id not bound to the object → 404, Passwork is not queried (protection against proxying arbitrary secrets)."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         resp = self._view(fake)(self._get(user, pw_id="no_such_pw"), pw_id="no_such_pw")
         assert resp.status_code == 404
@@ -177,10 +184,13 @@ class TestSecretDetailView:
         assert fake.calls == [("require_session",)]
 
     def test_binding_of_other_object_returns_404(self, user, binding):
+        """object_id without a device behind it → 404 object_not_found (the object gate fires before the binding lookup)."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         resp = self._view(fake)(self._get(user, params={"object_id": "2"}), pw_id="abc123")
         assert resp.status_code == 404
+        assert json.loads(resp.content)["code"] == "object_not_found"
         assert fake.calls == [("require_session",)]
 
     # --- Passwork failures ---
@@ -196,6 +206,7 @@ class TestSecretDetailView:
     )
     def test_passwork_error_maps_to_status_and_code(self, user, binding, exc, status, code):
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         fake = FakeGateway(get_item=exc)
         resp = self._view(fake)(self._get(user), pw_id="abc123")
         assert resp.status_code == status
@@ -207,6 +218,7 @@ class TestSecretDetailView:
     def test_detail_without_reveal_hides_password_and_secret_fields(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")  # permission present, but reveal was not requested
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         resp = self._view(fake)(self._get(user), pw_id="abc123")
         assert resp.status_code == 200
@@ -229,6 +241,7 @@ class TestSecretDetailView:
     def test_reveal_returns_password_and_creates_audit_log(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         request = self._get(user, params={"reveal": "true"})
         request.META["REMOTE_ADDR"] = "10.0.0.7"
@@ -244,12 +257,14 @@ class TestSecretDetailView:
     def test_reveal_param_is_case_insensitive(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         resp = self._view(FakeGateway(get_item=ITEM))(self._get(user, params={"reveal": "TRUE"}), pw_id="abc123")
         assert json.loads(resp.content)["password"] == "secret"
 
     def test_missing_item_fields_default_to_empty(self, user, binding):
         """Passwork response without fields → empty strings, no KeyError."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         resp = self._view(FakeGateway(get_item={}))(self._get(user), pw_id="abc123")
         assert resp.status_code == 200
         assert json.loads(resp.content) == {
@@ -320,6 +335,7 @@ class TestSecretCopyView:
 
     def test_binding_not_found_returns_404(self, user, binding):
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         fake = FakeGateway()
         resp = self._view(fake)(self._post(user, pw_id="no_such_pw"), pw_id="no_such_pw")
         assert resp.status_code == 404
@@ -328,6 +344,7 @@ class TestSecretCopyView:
 
     def test_copy_creates_audit_log(self, user, binding):
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         fake = FakeGateway()
         request = self._post(user)
         request.META["REMOTE_ADDR"] = "10.0.0.7"
@@ -617,13 +634,14 @@ class TestBindingsCreateView:
         assert resp.status_code == 400
         assert json.loads(resp.content)["code"] == "missing_params"
 
-    def test_creates_binding(self, user):
+    def test_creates_binding(self, user, device):
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
         request = self._post(
             user,
             {
                 "object_type": "device",
-                "object_id": 99,
+                "object_id": device.pk,
                 "passwork_item_id": "pw_new",
             },
         )
@@ -631,8 +649,26 @@ class TestBindingsCreateView:
         assert resp.status_code == 201
         assert PassworkBinding.objects.filter(passwork_item_id="pw_new").exists()
 
+    def test_create_on_missing_object_returns_404(self, user):
+        """The bound object must exist and be viewable — no bindings to arbitrary ids (ADR-0002)."""
+        grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
+        request = self._post(user, {"object_type": "device", "object_id": 424242, "passwork_item_id": "pw_new"})
+        resp = self.view(request)
+        assert resp.status_code == 404
+        assert json.loads(resp.content) == {"code": "object_not_found", "detail": "Object not found"}
+
+    def test_create_with_non_int_object_id_returns_400(self, user, device):
+        grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
+        request = self._post(user, {"object_type": "device", "object_id": "1", "passwork_item_id": "pw_new"})
+        resp = self.view(request)
+        assert resp.status_code == 400
+        assert json.loads(resp.content)["code"] == "invalid_object_id"
+
     def test_duplicate_returns_409(self, user, binding):
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
         request = self._post(
             user,
             {
@@ -689,6 +725,7 @@ class TestBindingsDeleteView:
 
     def test_deletes_binding(self, user, binding):
         grant_netbox_perm(user, "delete_binding")
+        grant_view_device(user)
         request = self.factory.delete(f"/bindings/{binding.pk}/")
         request.user = user
         request.session = {}

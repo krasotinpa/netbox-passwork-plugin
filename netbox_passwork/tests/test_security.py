@@ -8,7 +8,7 @@ import pytest
 from django.test import RequestFactory
 
 from netbox_passwork.models import PassworkAuditLog
-from netbox_passwork.tests.conftest import FakeGateway, grant_netbox_perm
+from netbox_passwork.tests.conftest import FakeGateway, grant_netbox_perm, grant_view_device
 from netbox_passwork.views import AuditLogView, SecretDetailView
 
 ITEM = {"name": "T", "login": "u", "password": "SECRET123", "custom_fields": [], "description": "", "url": ""}
@@ -29,6 +29,7 @@ class TestSecurityHardening:
     def test_arbitrary_pw_id_blocked(self, user, binding):
         """pw_id not from a binding → 404, the proxy must not proxy arbitrary secrets."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         resp = self._detail(fake, user, "HACKER_ID", {"object_type": "device", "object_id": "1"})
         assert resp.status_code == 404
@@ -60,6 +61,7 @@ class TestSecurityHardening:
         """Without reveal=true the password is not returned, even with reveal_secret permission."""
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         resp = self._detail(FakeGateway(get_item=ITEM), user, "abc123", {"object_type": "device", "object_id": "1"})
         assert resp.status_code == 200
         data = json.loads(resp.content)

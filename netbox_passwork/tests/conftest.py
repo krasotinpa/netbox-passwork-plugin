@@ -13,21 +13,33 @@ from netbox_passwork.models import PassworkBinding
 User = get_user_model()
 
 
-def grant_netbox_perm(user, action):
-    """Grants a permission via NetBox ObjectPermission (the only working way)."""
+def grant_model_perm(user, model, action, constraints=None):
+    """Grants a permission on an arbitrary model via NetBox ObjectPermission, optionally constrained."""
     from users.models import ObjectPermission
 
-    ct = ContentType.objects.get_for_model(PassworkBinding)
+    ct = ContentType.objects.get_for_model(model)
     op = ObjectPermission.objects.create(
-        name=f"test_{action}_{user.pk}",
+        name=f"test_{action}_{model._meta.model_name}_{user.pk}",
         actions=[action],
-        constraints=None,
+        constraints=constraints,
     )
     op.users.add(user)
     op.object_types.add(ct)
     if hasattr(user, "_object_perm_cache"):
         del user._object_perm_cache
     return op
+
+
+def grant_netbox_perm(user, action):
+    """Grants a plugin permission via NetBox ObjectPermission (the only working way)."""
+    return grant_model_perm(user, PassworkBinding, action)
+
+
+def grant_view_device(user, constraints=None):
+    """``dcim.view_device`` — the object gate for secret access (ADR-0002), optionally constrained."""
+    from dcim.models import Device
+
+    return grant_model_perm(user, Device, "view", constraints=constraints)
 
 
 @pytest.fixture
@@ -40,11 +52,30 @@ def other_user(db):
     return User.objects.create_user(username="otheruser", password="testpass123")
 
 
+def make_device(pk, name, site):
+    """A minimal Device; explicit pks keep fixture devices clear of nextval collisions."""
+    from dcim.models import Device, DeviceRole, DeviceType, Manufacturer
+
+    mfr, _ = Manufacturer.objects.get_or_create(name="Test Mfr", slug="test-mfr")
+    dtype, _ = DeviceType.objects.get_or_create(manufacturer=mfr, model="Test Type", slug="test-type")
+    role, _ = DeviceRole.objects.get_or_create(name="Test Role", slug="test-role")
+    return Device.objects.create(pk=pk, name=name, site=site, device_type=dtype, role=role)
+
+
 @pytest.fixture
-def binding(db, user):
+def device(db):
+    """Device pk=1 — the object the ``binding`` fixture points at (tests hardcode object_id=1)."""
+    from dcim.models import Site
+
+    site, _ = Site.objects.get_or_create(name="Site A", slug="site-a")
+    return make_device(1, "dev-1", site)
+
+
+@pytest.fixture
+def binding(db, user, device):
     b = PassworkBinding(
         object_type="device",
-        object_id=1,
+        object_id=device.pk,
         passwork_item_id="abc123",
         created_by=user,
     )

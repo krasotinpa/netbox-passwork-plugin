@@ -29,13 +29,24 @@ keys in the `PLUGIN_PERMISSIONS` dictionary ([permissions.py](../netbox_passwork
 The check is performed by `RequireNetboxPermMixin.dispatch()`, which is applied to every view
 except `PassworkLoginView` and `PassworkTotpView`.
 
+On top of the plugin permission, every object-scoped route (`secrets/`, `secrets/<pw_id>/detail/`,
+`secrets/<pw_id>/copy/`, `bindings/`, `bindings/<id>/`) also requires `view` access to the bound
+NetBox object itself, evaluated against the user's `ObjectPermission` constraints
+(`bound_object_access()` in [permissions.py](../netbox_passwork/permissions.py); ADR-0002). An
+object that is missing or hidden by constraints yields `404 object_not_found` (`binding_not_found`
+for `bindings/<id>/`) — see [docs/security.md](security.md) §2.1.
+
 ## 2. Request parameters
 
 ### `secrets/`, `secrets/<pw_id>/detail/`, `secrets/<pw_id>/copy/`
 
 - `object_type` (query, string) — the type of NetBox object the secret is bound to. Required for all three views.
-  - In `SecretsListView`, `SecretDetailView`, and `SecretCopyView` the value is **not** validated against `PassworkBinding.OBJECT_TYPE_CHOICES` — it's used as-is in the `PassworkBinding.objects.filter(...)` lookup.
+  - There is no separate `invalid_object_type` validation in these views: a value outside
+    `device`/`vm`/`service` resolves to no model in the object-level check and returns
+    `404 object_not_found`.
 - `object_id` (query, integer) — required; a parse failure (`int(...)` raises) returns `400 invalid_object_id`.
+- The object behind `object_type`/`object_id` must exist and be viewable by the user under their
+  `ObjectPermission` constraints — otherwise `404 object_not_found`, before the binding lookup.
 - `reveal` (query, `SecretDetailView` only) — `reveal=true` (case-insensitive) turns on revealing the password and secret custom fields, and requires the `reveal_secret` permission; any other value (including the parameter being absent) behaves as if reveal were off.
 
 ### `bindings/` (POST)
@@ -43,7 +54,8 @@ except `PassworkLoginView` and `PassworkTotpView`.
 Request body — JSON:
 
 - `object_type` (string, required) — **is** validated against `PassworkBinding.OBJECT_TYPE_CHOICES` (`device`, `vm`, `service`); a mismatch returns `400 invalid_object_type`.
-- `object_id` (required, any non-empty/non-zero value — checked via `all([...])`).
+- `object_id` (integer, required) — a non-integer JSON value returns `400 invalid_object_id`; the
+  object must exist and be viewable under the user's constraints — otherwise `404 object_not_found`.
 - `passwork_item_id` (string, required).
 
 ### `audit/`
@@ -86,7 +98,7 @@ response bodies are unchanged.
 | 400 | `missing_code` | `PassworkTotpView` | `TOTP code is required` |
 | 400 | `missing_params` | `SecretsListView` | `object_type and object_id are required` |
 | 400 | `missing_params` | `BindingsCreateView` | `object_type, object_id and passwork_item_id are required` |
-| 400 | `invalid_object_id` | `SecretsListView`, `SecretDetailView`, `SecretCopyView` | `object_id must be an integer` |
+| 400 | `invalid_object_id` | `SecretsListView`, `SecretDetailView`, `SecretCopyView`, `BindingsCreateView` | `object_id must be an integer` |
 | 400 | `invalid_object_type` | `BindingsCreateView` | `object_type must be one of: device, vm, service` |
 | 400 | `missing_query` | `PickerSearchView` | `Query parameter q is required` |
 | 400 | `invalid_param` | `AuditLogView` | `user must be an integer` / `limit and offset must be integers` / `limit must be >= 1` |
@@ -97,7 +109,8 @@ response bodies are unchanged.
 | 401 | `invalid_totp` | `PassworkTotpView` | `Invalid TOTP code` |
 | 403 | `netbox_permission_denied` | every view with a required permission; `SecretDetailView` — separately, when `reveal=true` without `reveal_secret` | `Permission denied` |
 | 403 | `pw_access_denied` | `SecretDetailView` (`get_item`), `PickerFoldersView`/`PickerVaultFoldersView`/`PickerSearchView` | `Access denied for /api/v1/...` |
-| 404 | `binding_not_found` | `SecretDetailView`, `SecretCopyView`, `BindingsDeleteView` | `Binding not found` |
+| 404 | `object_not_found` | `SecretsListView`, `SecretDetailView`, `SecretCopyView`, `BindingsCreateView` | `Object not found` — the bound object is missing, or hidden by the user's `ObjectPermission` constraints (ADR-0002) |
+| 404 | `binding_not_found` | `SecretDetailView`, `SecretCopyView`, `BindingsDeleteView` | `Binding not found` — in `BindingsDeleteView` also when the binding's object is hidden by constraints |
 | 405 | — | `PassworkView`: unsupported method (a plain Django `HttpResponseNotAllowed` response with an `Allow` header, no JSON body) | — |
 | 409 | `duplicate_binding` | `BindingsCreateView` | `Binding already exists` |
 | 502 | `pw_bad_response` | every view via the gateway | `Passwork returned a non-JSON response` |
@@ -127,6 +140,8 @@ Additional notes:
 - Every view except `PassworkLoginView` and `PassworkTotpView` requires:
   1. An authenticated NetBox user (`request.user.is_authenticated`) — otherwise `401 not_authenticated` (`RequireNetboxPermMixin.dispatch`).
   2. The user holding the corresponding NetBox object permission — otherwise `403 netbox_permission_denied`.
+     For object-scoped routes, additionally `view` access to the bound object under the user's
+     `ObjectPermission` constraints — otherwise `404` (see the error table above and ADR-0002).
   3. For views that talk to Passwork (`PassworkLoginView`, `PassworkTotpView`, `SecretDetailView`, `SecretCopyView`, `PickerFoldersView`, `PickerFolderContentsView`, `PickerVaultFoldersView`, `PickerSearchView`) — a valid Passwork session in the Django session (`request.session["pw_session"]`, except for `PassworkLoginView`, which doesn't need one yet). All of them go through the base `PassworkView` (ADR-0001), and `dispatch` runs the same sequence of checks every time: NetBox permissions → 405 for an unsupported method (`OPTIONS` doesn't require a Passwork session) → Passwork session (`self.gateway.require_session()`, via `PassworkGateway`) → the view method's own parameters/body. Passwork failures (`PassworkError`) are turned into `{"code","detail"}` at the same point. A missing or expired Passwork session results in a `401` (`pw_not_authenticated`/`pw_session_expired`).
 - `PassworkLoginView` and `PassworkTotpView` only require an authenticated NetBox user — `PassworkLoginView` doesn't need a Passwork session yet; `PassworkTotpView` only expects the `pw_session` obtained at the login step, so it can continue the flow.
 - The plugin does not disable Django's standard CSRF protection (there's no `csrf_exempt` anywhere in the code), so every `POST`/`DELETE` request (`auth/login/`, `auth/totp/`, `secrets/<pw_id>/copy/`, `bindings/`, `bindings/<id>/`) requires a valid CSRF token, the same as any other request within NetBox.

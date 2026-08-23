@@ -85,7 +85,9 @@ This mapping is captured in the `PLUGIN_PERMISSIONS` dictionary in
 `require_netbox_perm` decorator and by the `RequireNetboxPermMixin` mixin (checked via
 `request.user.has_perm(...)`) across all of the proxying views (`SecretsListView`,
 `SecretDetailView`, `SecretCopyView`, `BindingsCreateView`, `BindingsDeleteView`,
-`AuditLogView`).
+`AuditLogView`). Object-scoped views additionally require `view` access to the bound NetBox
+object under the user's `ObjectPermission` constraints — `bound_object_access()` in the same
+module ([ADR-0002](adr/0002-object-level-permissions.md), [security.md](security.md) §2.1).
 
 ---
 

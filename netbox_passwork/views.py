@@ -8,7 +8,11 @@ from django.views import View
 from netbox_passwork.exceptions import PassworkError
 from netbox_passwork.gateway import build_gateway
 from netbox_passwork.models import PassworkAuditLog, PassworkBinding
-from netbox_passwork.permissions import PLUGIN_PERMISSIONS, RequireNetboxPermMixin
+from netbox_passwork.permissions import (
+    PLUGIN_PERMISSIONS,
+    RequireNetboxPermMixin,
+    bound_object_access,
+)
 from netbox_passwork.serializers import (
     AuditLogSerializer,
     PassworkBindingSerializer,
@@ -71,13 +75,17 @@ def _bound_object(request, pw_id: str) -> tuple[str, int]:
     """
     ``(object_type, object_id)`` of the NetBox object, from query parameters, that ``pw_id`` is bound to.
 
-    ``object_id`` not a number → 400 ``invalid_object_id``; no binding → 404 ``binding_not_found``
-    (guards against proxying arbitrary secrets: Passwork is never queried).
+    ``object_id`` not a number → 400 ``invalid_object_id``; the object is missing or not viewable
+    under the user's ``ObjectPermission`` constraints → 404 ``object_not_found`` (checked before
+    the binding lookup, so binding existence is not disclosed — ADR-0002); no binding →
+    404 ``binding_not_found`` (guards against proxying arbitrary secrets: Passwork is never queried).
     """
     object_type = request.GET.get("object_type", "").strip()
     object_id = _object_id(request)
     if object_id is None:
         raise ApiError("object_id must be an integer", code="invalid_object_id", http_status=400)
+    if bound_object_access(request.user, object_type, object_id) != "visible":
+        raise ApiError("Object not found", code="object_not_found", http_status=404)
     if not PassworkBinding.objects.filter(
         object_type=object_type,
         object_id=object_id,
@@ -202,6 +210,9 @@ class SecretsListView(RequireNetboxPermMixin, View):
         if object_id is None:
             return _error("invalid_object_id", "object_id must be an integer", 400)
 
+        if bound_object_access(request.user, object_type, object_id) != "visible":
+            return _error("object_not_found", "Object not found", 404)
+
         bindings = PassworkBinding.objects.filter(
             object_type=object_type,
             object_id=object_id,
@@ -319,6 +330,13 @@ class BindingsCreateView(RequireNetboxPermMixin, View):
         if object_type not in valid_types:
             return _error("invalid_object_type", f"object_type must be one of: {', '.join(valid_types)}", 400)
 
+        if not isinstance(object_id, int) or isinstance(object_id, bool):
+            return _error("invalid_object_id", "object_id must be an integer", 400)
+
+        # Object gate before the duplicate check, so binding existence is not disclosed (ADR-0002)
+        if bound_object_access(request.user, object_type, object_id) != "visible":
+            return _error("object_not_found", "Object not found", 404)
+
         # Check for a duplicate before saving — return 409 instead of a DB exception
         if PassworkBinding.objects.filter(
             object_type=object_type,
@@ -350,6 +368,12 @@ class BindingsDeleteView(RequireNetboxPermMixin, View):
         try:
             binding = PassworkBinding.objects.get(pk=binding_id)
         except PassworkBinding.DoesNotExist:
+            return _error("binding_not_found", "Binding not found", 404)
+
+        # "hidden" — the object exists but is outside the user's constraints: answer exactly as if
+        # the binding did not exist. "missing" — an orphaned binding: deletable with the plugin
+        # permission alone, so leftovers can be cleaned up (ADR-0002).
+        if bound_object_access(request.user, binding.object_type, binding.object_id) == "hidden":
             return _error("binding_not_found", "Binding not found", 404)
 
         # Snapshot of the state before deletion — ends up in the prechange_data changelog

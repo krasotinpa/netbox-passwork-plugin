@@ -12,7 +12,7 @@ from core.models import ObjectChange
 from django.contrib.contenttypes.models import ContentType
 
 from netbox_passwork.models import PassworkBinding
-from netbox_passwork.tests.conftest import grant_netbox_perm
+from netbox_passwork.tests.conftest import grant_netbox_perm, grant_view_device
 
 API = "/plugins/passwork"
 
@@ -27,8 +27,9 @@ def _binding_changes(binding_id):
 
 @pytest.mark.django_db
 class TestBindingChangelog:
-    def test_create_writes_objectchange(self, client, user):
+    def test_create_writes_objectchange(self, client, user, device):
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
         client.force_login(user)
 
         resp = client.post(
@@ -36,7 +37,7 @@ class TestBindingChangelog:
             data=json.dumps(
                 {
                     "object_type": "device",
-                    "object_id": 7,
+                    "object_id": device.pk,
                     "passwork_item_id": "pw_cl_001",
                 }
             ),
@@ -54,6 +55,7 @@ class TestBindingChangelog:
 
     def test_delete_writes_objectchange(self, client, user, binding):
         grant_netbox_perm(user, "delete_binding")
+        grant_view_device(user)
         client.force_login(user)
 
         resp = client.delete(f"{API}/bindings/{binding.pk}/")

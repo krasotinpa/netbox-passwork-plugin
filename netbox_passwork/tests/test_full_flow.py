@@ -19,6 +19,7 @@ from netbox_passwork.tests.conftest import (
     PASSWORK_URL,
     FakeGateway,
     grant_netbox_perm,
+    grant_view_device,
     mock_passwork_login,
     no_passwork_session,
     wrap_passwork_response,
@@ -70,6 +71,7 @@ class TestFullFlow:
     def test_secrets_list_returns_bindings(self, user, binding):
         """GET /secrets/ returns the list of bindings for the object."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         request = self._make_request(
             "get",
             "/secrets/",
@@ -94,6 +96,7 @@ class TestFullFlow:
     def test_lazy_load_meta_returns_name_login(self, user, binding):
         """detail/ without reveal → name and login, no password."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         resp = self._detail_view()(self._get_detail(user), pw_id="abc123")
         assert resp.status_code == 200
         data = json.loads(resp.content)
@@ -105,6 +108,7 @@ class TestFullFlow:
         """detail/?reveal=true → password + an AuditLog entry."""
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         resp = self._detail_view()(self._get_detail(user, reveal=True), pw_id="abc123")
         assert resp.status_code == 200
         assert json.loads(resp.content)["password"] == "supersecret"
@@ -125,6 +129,7 @@ class TestFullFlow:
     def test_arbitrary_pw_id_not_in_binding_returns_404(self, user, binding):
         """detail/ with a pw_id not from a binding → 404 (protection against proxy abuse), get_item is not called."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         fake = FakeGateway(get_item=ITEM)
         resp = self._detail_view(fake)(self._get_detail(user, pw_id="ARBITRARY_ID"), pw_id="ARBITRARY_ID")
         assert resp.status_code == 404
@@ -198,6 +203,7 @@ class TestLoginThenSecretsViaGateway:
     def test_login_then_detail_reads_secret(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
         grant_netbox_perm(user, "reveal_secret")
+        grant_view_device(user)
         mock_passwork_login()
         _mock_passwork_item("abc123", "Core Router", "s3cret")
 
@@ -231,6 +237,7 @@ class TestLoginThenSecretsViaGateway:
     def test_detail_passwork_403_maps_to_pw_access_denied(self, user, binding):
         """Real failure chain: Passwork 403 → PassworkAccessDenied in the client → gateway → PassworkView → 403 {"code","detail"}."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         mock_passwork_login()
         resp_mock.add(
             resp_mock.GET,
@@ -253,6 +260,7 @@ class TestLoginThenSecretsViaGateway:
     @resp_mock.activate
     def test_login_totp_then_detail_reads_secret(self, user, binding):
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         mock_passwork_login(requires_totp=True)
         resp_mock.add(
             resp_mock.POST,
@@ -320,6 +328,7 @@ class TestReleaseScenarioViaGateway:
     def test_full_release_scenario(self, user, binding):
         for action in ("view_secrets", "reveal_secret", "add_binding"):
             grant_netbox_perm(user, action)
+        grant_view_device(user)
         mock_passwork_login(requires_totp=True)
         resp_mock.add(
             resp_mock.POST,
@@ -375,12 +384,12 @@ class TestReleaseScenarioViaGateway:
                 "post",
                 "/bindings/",
                 user,
-                body={"object_type": "device", "object_id": 42, "passwork_item_id": "pw_new_001"},
+                body={"object_type": "device", "object_id": binding.object_id, "passwork_item_id": "pw_new_001"},
             )
             assert resp.status_code == 201, resp.content
 
         assert PassworkBinding.objects.filter(
-            object_type="device", object_id=42, passwork_item_id="pw_new_001"
+            object_type="device", object_id=binding.object_id, passwork_item_id="pw_new_001"
         ).exists()
         actions = sorted(PassworkAuditLog.objects.filter(passwork_item_id="abc123").values_list("action", flat=True))
         assert actions == ["copy", "reveal"]
@@ -394,6 +403,7 @@ class TestReleaseScenarioViaGateway:
     def test_session_record_written_before_1_3_keeps_working(self, user, binding):
         """A Passwork session written by version ≤ 1.2.x is read by the gateway without a repeated login."""
         grant_netbox_perm(user, "view_secrets")
+        grant_view_device(user)
         _mock_passwork_item("abc123", "Core Router", "s3cret")
         now = int(time.time())
         self.session["pw_session"] = _pre_1_3_record(

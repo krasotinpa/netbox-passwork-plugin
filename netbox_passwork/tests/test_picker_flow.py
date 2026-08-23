@@ -20,6 +20,7 @@ from netbox_passwork.tests.conftest import (
     PASSWORK_URL,
     FakeGateway,
     grant_netbox_perm,
+    grant_view_device,
     mock_passwork_login,
     wrap_passwork_response,
 )
@@ -64,9 +65,10 @@ class TestPickerFlow:
         assert json.loads(resp.content) == {"code": "pw_session_expired", "detail": "Passwork session expired"}
         assert fake.calls == [("require_session",)]
 
-    def test_search_then_create_binding_saves_to_db(self, user):
+    def test_search_then_create_binding_saves_to_db(self, user, device):
         """Search via the gateway → chosen pw_id → POST /bindings/ creates a binding in the DB."""
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
         fake = FakeGateway(search_items=FOUND)
         resp = PickerSearchView.as_view(gateway_factory=lambda request: fake)(
             self._get("/picker/search/", user, {"q": "core"})
@@ -76,17 +78,20 @@ class TestPickerFlow:
         assert found == FOUND
         assert fake.calls == [("require_session",), ("search_items", "core", None)]
 
-        resp = self._post_binding(user, {"object_type": "device", "object_id": 42, "passwork_item_id": found[0]["id"]})
+        resp = self._post_binding(
+            user, {"object_type": "device", "object_id": device.pk, "passwork_item_id": found[0]["id"]}
+        )
         assert resp.status_code == 201
 
         binding = PassworkBinding.objects.get(passwork_item_id="pw_new_001")
         assert binding.object_type == "device"
-        assert binding.object_id == 42
+        assert binding.object_id == device.pk
         assert binding.created_by == user
 
     def test_duplicate_binding_returns_409(self, user, binding):
         """Re-binding the same pw_id → 409."""
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
         resp = self._post_binding(user, {"object_type": "device", "object_id": 1, "passwork_item_id": "abc123"})
         assert resp.status_code == 409
         assert json.loads(resp.content)["code"] == "duplicate_binding"
@@ -94,6 +99,7 @@ class TestPickerFlow:
     def test_delete_binding(self, user, binding):
         """DELETE /bindings/{id}/ removes the binding from the DB."""
         grant_netbox_perm(user, "delete_binding")
+        grant_view_device(user)
         request = self.factory.delete(f"/bindings/{binding.pk}/")
         request.user = user
         request.session = {}
@@ -105,6 +111,7 @@ class TestPickerFlow:
     def test_rebind_after_delete(self, user, binding):
         """After deletion the same pw_id can be bound again."""
         grant_netbox_perm(user, "add_binding")
+        grant_view_device(user)
 
         binding.delete()
 
