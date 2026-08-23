@@ -35,6 +35,8 @@ The binding check runs **before** `client.get_item(pw_id, ...)` is called, that 
 Passwork API is contacted at all. This prevents a user holding a valid Passwork session from
 fetching the data of an arbitrary `pw_id` that is not bound to a NetBox object they have
 `view_secrets` on. The same check is present in `SecretCopyView` before the audit record is written.
+It is itself preceded by the object-level check (section 2.1), so the response never discloses
+whether a hidden object has bindings.
 
 Covered by the tests in `test_proxy.py` (`TestSecretDetailView`) and `test_security.py`
 (`TestSecurityHardening`).
@@ -70,6 +72,28 @@ revealing a password are therefore guarded by different permissions.
 Permissions are assigned through the standard NetBox mechanism — `ObjectPermission`
 (Admin → Users → Permissions), as described in [README.md](../README.md), section
 "Permissions (RBAC)". They are attached to the `ContentType` of the `PassworkBinding` model.
+
+### 2.1. Object-level check (ObjectPermission constraints)
+
+On top of the plugin permissions, every object-scoped operation — secrets list, secret detail,
+reveal, copy, binding create and binding delete — requires `view` access to the bound NetBox
+object itself (`dcim.view_device` / `virtualization.view_virtualmachine` / `ipam.view_service`),
+evaluated against the user's `ObjectPermission` constraints (issue #1,
+[ADR-0002](adr/0002-object-level-permissions.md)). A user whose `view_device` is constrained to
+"devices of site A only" cannot touch secrets bound to devices of other sites, even knowing
+their `object_type`/`object_id` — and a user with no `view` permission on the object type at all
+cannot touch its secrets regardless of plugin permissions.
+
+Implemented in `bound_object_access()` ([permissions.py](../netbox_passwork/permissions.py)) via
+NetBox's `restrict()`, which applies constraints, superuser status and `EXEMPT_VIEW_PERMISSIONS`
+exactly as NetBox core does. An object that exists but is hidden by constraints is answered with
+**404** (`object_not_found`), the same convention NetBox core uses; the check runs **before**
+the binding lookup, so binding existence is never disclosed for hidden objects. Orphaned
+bindings (the bound object was deleted) are unreadable for everyone but deletable with
+`delete_binding` alone, so leftovers can be cleaned up.
+
+Covered by the matrix tests in `test_permissions.py` (`TestObjectGateMatrix`,
+`TestOrphanedBindings`, `TestBoundObjectAccess`).
 
 ---
 
@@ -177,23 +201,6 @@ Regression coverage: jsdom-based JS tests in
 
 ## 7. Known limitations
 
-### Object-level NetBox permissions are not enforced
-
-`RequireNetboxPermMixin` and `require_netbox_perm` check `request.user.has_perm(perm)` at the
-model level only — without passing the specific object and without `restrict()` on the queryset.
-NetBox `ObjectPermission` constraints (for example, "devices of site A only") apply only when
-filtering through the object or `restrict()`; here access to a secret depends purely on a
-matching `object_type + object_id + pw_id` binding.
-
-As a result a user whose permission is constrained to a particular site or group of objects can
-still read secrets bound to objects outside that constraint, provided they know or guess the
-`object_type`/`object_id`. **If your deployment relies on `ObjectPermission` constraints to
-separate secrets between teams or sites, treat this as an authorization bypass and grant the
-plugin permissions without constraints only to users who may see every bound secret.**
-
-The fix — passing the NetBox object into the permission check, or filtering access to the object
-itself first — is not implemented yet.
-
 ### Binding history is limited by the NetBox changelog
 
 Binding history relies on `core.ObjectChange`, so it does not record the client IP and its
@@ -251,6 +258,6 @@ Running the plugin securely requires (see [README.md](../README.md)):
 | Passwork token encryption (Fernet)               | Implemented, single location — `PassworkGateway` (`gateway.py`) |
 | Audit log IP anti-spoofing (`X-Forwarded-For`)   | Implemented                                                   |
 | XSS protection in `passwork.js`                  | Implemented, covered by jsdom tests                           |
-| Object-level NetBox permissions (constraints)    | **Not enforced — see Known limitations**                      |
+| Object-level NetBox permissions (constraints)    | Implemented (ADR-0002), covered by matrix tests               |
 | Per-object scoping of the audit log              | **Not implemented — intentional, see Known limitations**      |
 | Token lifetimes from Passwork, non-heuristic TOTP| **Not implemented — see Known limitations**                   |

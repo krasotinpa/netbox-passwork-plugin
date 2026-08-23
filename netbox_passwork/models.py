@@ -3,6 +3,19 @@ from django.db import models
 from netbox.models import ChangeLoggedModel
 
 
+def object_model(object_type: str):
+    """Model class behind a binding's ``object_type``; None — unknown type."""
+    from dcim.models import Device
+    from ipam.models import Service
+    from virtualization.models import VirtualMachine
+
+    return {
+        "device": Device,
+        "vm": VirtualMachine,
+        "service": Service,
+    }.get(object_type)
+
+
 class PassworkBinding(ChangeLoggedModel):
     """Binding of a NetBox object to a Passwork item.
 
@@ -49,15 +62,7 @@ class PassworkBinding(ChangeLoggedModel):
 
     def _resolved_object(self):
         """Returns the live NetBox object for (object_type, object_id), or None."""
-        from dcim.models import Device
-        from ipam.models import Service
-        from virtualization.models import VirtualMachine
-
-        model = {
-            "device": Device,
-            "vm": VirtualMachine,
-            "service": Service,
-        }.get(self.object_type)
+        model = object_model(self.object_type)
         if not model:
             return None
         return model.objects.filter(pk=self.object_id).first()

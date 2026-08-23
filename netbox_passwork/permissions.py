@@ -12,6 +12,26 @@ PLUGIN_PERMISSIONS = {
 }
 
 
+def bound_object_access(user, object_type: str, object_id: int) -> str:
+    """
+    Access to the bound NetBox object under the user's ``ObjectPermission`` constraints (issue #1,
+    ADR-0002): ``"visible"`` — the object exists and the user may view it; ``"hidden"`` — it exists
+    but the user lacks ``view`` on it (no permission, or the object is outside the constraints);
+    ``"missing"`` — no such object (unknown type or deleted).
+
+    ``restrict()`` applies superuser status and ``EXEMPT_VIEW_PERMISSIONS`` the same way
+    NetBox core does.
+    """
+    from netbox_passwork.models import object_model
+
+    model = object_model(object_type)
+    if model is None or not model.objects.filter(pk=object_id).exists():
+        return "missing"
+    if model.objects.restrict(user, "view").filter(pk=object_id).exists():
+        return "visible"
+    return "hidden"
+
+
 def require_netbox_perm(perm_key: str):
     def decorator(view_func):
         def wrapper(request, *args, **kwargs):
