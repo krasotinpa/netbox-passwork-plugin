@@ -20,6 +20,11 @@ urlpatterns = [
         views.PickerFolderContentsView.as_view(),
         name="pw_picker_folder_items",
     ),
+    path(
+        "picker/folders/<str:vault_id>/folders/",
+        views.PickerVaultFoldersView.as_view(),
+        name="pw_picker_vault_folders",
+    ),
     path("picker/search/", views.PickerSearchView.as_view(), name="pw_picker_search"),
     # Audit
     path("audit/", views.AuditLogView.as_view(), name="pw_audit"),

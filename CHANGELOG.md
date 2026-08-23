@@ -6,6 +6,14 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+### Changed
+- The *Bind Passwork secret* modal is now an Explorer-style browser (spec #26): a folder tree on the left (vaults are roots; a vault's folders load as one flat list per vault), the selected node's direct children on the right as a Name/Login table with clickable breadcrumbs, and a single click on a folder in the right pane opening it with the tree kept in sync. A vault node now shows only its top-level folders and root passwords instead of every password in the vault
+- Picker search: starts from 3 characters as you type (debounced, stale responses are discarded), results are a flat table with each secret's path, clicking a result jumps to its folder with the tree expanded ("show in folder"), clearing the box returns to the folder you were in, and a "This vault only" checkbox scopes the search to the selected vault (new `vault_id` parameter of `GET picker/search/`; the Passwork request now uses the documented POST search variant)
+- Picker errors: a vault that answers 403 stays in the tree marked "no access" while other vaults keep working, and a Passwork timeout shows a retryable message naming the `PASSWORK_REQUEST_TIMEOUT` setting
+
+### Added
+- `GET picker/folders/<vault_id>/folders/` — the vault's flat folder list backing the picker tree (gateway operation `list_vault_folders()`)
+
 ## [1.4.0] — 2026-08-21
 
 ### Added

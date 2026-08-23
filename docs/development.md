@@ -143,7 +143,7 @@ Fixtures in [conftest.py](../netbox_passwork/tests/conftest.py):
   it uses the existing test database instead of recreating it on every run (paired with
   `--reuse-db`).
 - `FakeGateway(**outcomes)` — not a pytest fixture but a class; a programmable Passwork gateway for
-  view tests with the same seven operations as `PassworkGateway` (interface parity is checked by
+  view tests with the same eight operations as `PassworkGateway` (interface parity is checked by
   `TestFakeGatewayInterface` in `test_gateway.py`). `outcomes` maps an operation name to its
   result — a value is returned, an exception instance is raised; calls accumulate in `fake.calls`.
 - `no_passwork_session()` — a ready-made `PassworkError` ("no record", 401 `pw_not_authenticated`)
@@ -210,10 +210,14 @@ The test files live in [netbox_passwork/tests/js/](../netbox_passwork/tests/js/)
 - [auth_button.test.js](../netbox_passwork/tests/js/auth_button.test.js) checks that the tab
   header switches between the "Bind secret" and "Authenticate" buttons based on the 401 signal
   from the secrets endpoints.
-- [picker_contents.test.js](../netbox_passwork/tests/js/picker_contents.test.js) checks the
-  picker's right pane: a vault click loads `/picker/folders/<vault_id>/items/` (not a text
-  search by folder ID), subfolders render with drill-down, empty contents show a hint, folder
-  names are treated as text, and the search box still goes through `/picker/search/`.
+- [picker_explorer.test.js](../netbox_passwork/tests/js/picker_explorer.test.js) checks the
+  Explorer-style picker end to end through the fetch seam: vaults render as tree roots, a vault
+  click loads its flat folder list and root contents, the chevron expands the tree without
+  loading contents, a folder click in the right pane drills down and highlights the folder in
+  the tree, breadcrumbs navigate back up, contents are cached for one modal opening, a denied
+  vault is marked "no access", a timeout shows a retryable message, and the search block: the
+  3-char minimum, flat results with paths, scope via `vault_id`, clearing the box returning to
+  the current node, stale responses never rendering, "show in folder", and Bind from results.
 
 ---
 

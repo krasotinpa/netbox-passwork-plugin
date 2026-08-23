@@ -20,6 +20,7 @@ from netbox_passwork.views import (
     PickerFolderContentsView,
     PickerFoldersView,
     PickerSearchView,
+    PickerVaultFoldersView,
     SecretCopyView,
     SecretDetailView,
     SecretsListView,
@@ -841,7 +842,7 @@ class TestPickerSearchView:
         resp = self._view(fake)(self._get(user))
         assert resp.status_code == status
         assert json.loads(resp.content) == {"code": code, "detail": exc.detail}
-        assert fake.calls == [("require_session",), ("search_items", "router")]
+        assert fake.calls == [("require_session",), ("search_items", "router", None)]
 
     def test_returns_found_items_unchanged(self, user):
         grant_netbox_perm(user, "add_binding")
@@ -849,7 +850,7 @@ class TestPickerSearchView:
         resp = self._view(fake)(self._get(user))
         assert resp.status_code == 200
         assert json.loads(resp.content) == FOUND, "the successful body is an array of items with no wrapper"
-        assert fake.calls == [("require_session",), ("search_items", "router")]
+        assert fake.calls == [("require_session",), ("search_items", "router", None)]
 
     def test_query_is_stripped_and_passed_verbatim(self, user):
         """Leading/trailing whitespace is trimmed, the rest (including `&`, `=`) goes to the gateway verbatim — the client encodes it."""
@@ -857,12 +858,96 @@ class TestPickerSearchView:
         fake = FakeGateway(search_items=[])
         resp = self._view(fake)(self._get(user, params={"q": "  test&perPage=9999 "}))
         assert resp.status_code == 200
-        assert fake.calls == [("require_session",), ("search_items", "test&perPage=9999")]
+        assert fake.calls == [("require_session",), ("search_items", "test&perPage=9999", None)]
+
+    def test_vault_scope_is_passed_to_the_gateway(self, user):
+        """?vault_id=... scopes the search to one vault; an empty value means no scope."""
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(search_items=[])
+        resp = self._view(fake)(self._get(user, params={"q": "router", "vault_id": "v1"}))
+        assert resp.status_code == 200
+        assert fake.calls == [("require_session",), ("search_items", "router", "v1")]
+
+    @pytest.mark.parametrize("vault_id", ["", "   "])
+    def test_blank_vault_scope_means_global_search(self, user, vault_id):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(search_items=[])
+        resp = self._view(fake)(self._get(user, params={"q": "router", "vault_id": vault_id}))
+        assert resp.status_code == 200
+        assert fake.calls == [("require_session",), ("search_items", "router", None)]
 
     def test_default_gateway_factory_is_build_gateway(self):
         assert PickerSearchView.gateway_factory is build_gateway
         assert PickerSearchView.permission_required == "add_binding"
         assert PickerSearchView.requires_passwork_session is True
+
+
+@pytest.mark.django_db
+class TestPickerVaultFoldersView:
+    """
+    GET /picker/folders/<vault_id>/folders/ via the gateway: 401 NetBox → 403 permission add_binding →
+    401 Passwork session → list_vault_folders(vault_id). The successful body is the vault's flat folder
+    list (array, no wrapper); Passwork failures — {"code","detail"} with the status from the exception.
+    """
+
+    FLAT = [
+        {"id": "f1", "name": "Network", "parentFolderId": None},
+        {"id": "f2", "name": "Nested", "parentFolderId": "f1"},
+    ]
+
+    def setup_method(self):
+        self.factory = RequestFactory()
+
+    def _get(self, user):
+        request = self.factory.get("/picker/folders/v1/folders/")
+        request.user = user
+        request.session = {}
+        return request
+
+    def _view(self, fake=None):
+        return PickerVaultFoldersView.as_view(gateway_factory=lambda request: fake or FakeGateway())
+
+    def test_unauthenticated_returns_401_before_gateway(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        resp = PickerVaultFoldersView.as_view(gateway_factory=_never_called)(self._get(AnonymousUser()), vault_id="v1")
+        assert resp.status_code == 401
+        assert json.loads(resp.content)["code"] == "not_authenticated"
+
+    def test_no_permission_returns_403_before_gateway(self, user):
+        resp = PickerVaultFoldersView.as_view(gateway_factory=_never_called)(self._get(user), vault_id="v1")
+        assert resp.status_code == 403
+        assert json.loads(resp.content)["code"] == "netbox_permission_denied"
+
+    def test_no_passwork_session_returns_401(self, user):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(require_session=no_passwork_session())
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == 401
+        assert json.loads(resp.content) == {"code": "pw_not_authenticated", "detail": "Passwork session not found"}
+        assert fake.calls == [("require_session",)], "list_vault_folders was not called"
+
+    @pytest.mark.parametrize("exc, status, code", PASSWORK_FAILURES)
+    def test_passwork_error_maps_to_status_and_code(self, user, exc, status, code):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_vault_folders=exc)
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == status
+        assert json.loads(resp.content) == {"code": code, "detail": exc.detail}
+        assert fake.calls == [("require_session",), ("list_vault_folders", "v1")]
+
+    def test_returns_flat_folder_list_unchanged(self, user):
+        grant_netbox_perm(user, "add_binding")
+        fake = FakeGateway(list_vault_folders=self.FLAT)
+        resp = self._view(fake)(self._get(user), vault_id="v1")
+        assert resp.status_code == 200
+        assert json.loads(resp.content) == self.FLAT, "the successful body is the flat folder array with no wrapper"
+        assert fake.calls == [("require_session",), ("list_vault_folders", "v1")]
+
+    def test_default_gateway_factory_is_build_gateway(self):
+        assert PickerVaultFoldersView.gateway_factory is build_gateway
+        assert PickerVaultFoldersView.permission_required == "add_binding"
+        assert PickerVaultFoldersView.requires_passwork_session is True
 
 
 CONTENTS = {"folders": [{"id": "f1", "name": "Network"}], "items": FOUND}

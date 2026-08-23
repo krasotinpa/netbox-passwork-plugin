@@ -134,7 +134,7 @@ anything unexpected) are not masked as `401`.
 
 `PassworkGateway.require_session()` is used by every view that talks to Passwork
 (`PassworkLoginView`/`PassworkTotpView`, `SecretDetailView`, `SecretCopyView`,
-`PickerFoldersView`, `PickerSearchView`); the plugin installs no Django middleware of its own
+`PickerFoldersView`, `PickerVaultFoldersView`, `PickerSearchView`); the plugin installs no Django middleware of its own
 (see [ADR-0001](adr/0001-passwork-gateway-not-middleware.md)).
 
 Tokens are kept on the server only (in the Django session, never in the browser), and passwords

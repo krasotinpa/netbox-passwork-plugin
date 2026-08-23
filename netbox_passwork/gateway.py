@@ -5,7 +5,7 @@ behalf of the Passwork session (see docs/adr/0001-passwork-gateway-not-middlewar
 The module owns everything related to the Passwork session: it is the only place that
 reads the plugin config, the only place that Fernet-encrypts its fields, reads/writes/
 deletes its record in storage (in production, the request's Django session), refreshes
-the access token, and provides seven domain operations. Passwork failures are raised as
+the access token, and provides eight domain operations. Passwork failures are raised as
 ``PassworkError`` with ``code``/``http_status`` — the failure context is known to the operation.
 """
 
@@ -31,7 +31,7 @@ def _not_authenticated(detail: str) -> PassworkError:
 
 class PassworkGateway:
     """
-    Seven operations on behalf of the Passwork session, over storage with a ``dict`` interface.
+    Eight operations on behalf of the Passwork session, over storage with a ``dict`` interface.
 
     ``storage`` — where the Passwork session record lives (``request.session`` in
     production, a plain ``dict`` in tests); ``client`` — the HTTP implementation of the
@@ -72,13 +72,17 @@ class PassworkGateway:
         """List of Passwork vaults."""
         return self._client.list_vaults(self._load())
 
-    def search_items(self, query: str) -> list:
-        """Search Passwork items (the query is URL-encoded by the client)."""
-        return self._client.search_items(query, self._load())
+    def search_items(self, query: str, vault_id: str | None = None) -> list:
+        """Search Passwork items, optionally scoped to one vault (the query travels in the POST body)."""
+        return self._client.search_items(query, self._load(), vault_id)
 
     def list_folder_contents(self, vault_id: str, folder_id: str | None = None) -> dict:
         """Direct subfolders and passwords of a Passwork vault, or of one of its folders."""
         return self._client.list_folder_contents(vault_id, folder_id, self._load())
+
+    def list_vault_folders(self, vault_id: str) -> list:
+        """The vault's flat folder list — the picker builds its tree from ``parentFolderId``."""
+        return self._client.list_vault_folders(vault_id, self._load())
 
     def require_session(self) -> None:
         """Guarantees the Passwork session exists and hasn't expired (refreshing it if needed)."""

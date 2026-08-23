@@ -1,39 +1,41 @@
 {% load i18n %}
 <div class="modal fade" id="pw-picker-modal" tabindex="-1" aria-labelledby="pw-picker-modal-label" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="pw-picker-modal-label">
+        <h5 class="modal-title me-3" id="pw-picker-modal-label">
           <i class="mdi mdi-folder-search-outline me-1"></i>{% trans "Bind Passwork secret" %}
         </h5>
-        <button type="button" class="btn-close" onclick="pwHideModal('pw-picker-modal')" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        {# Search #}
-        <div class="input-group mb-3">
+        {# Search: min 3 chars, debounced; the checkbox scopes it to the selected vault #}
+        <div class="input-group input-group-sm flex-grow-1 me-3" style="max-width: 460px;">
           <span class="input-group-text"><i class="mdi mdi-magnify"></i></span>
           <input type="text" class="form-control" id="pw-picker-search"
                  placeholder="{% trans 'Search secrets…' %}"
-                 oninput="pwPickerSearch(this.value)">
+                 oninput="pwPickerSearchInput(this.value)">
+          <span class="input-group-text">
+            <input class="form-check-input mt-0 me-1" type="checkbox" id="pw-picker-scope"
+                   onchange="pwPickerScopeChanged()">
+            <label class="form-check-label" for="pw-picker-scope">{% trans "This vault only" %}</label>
+          </span>
         </div>
-
-        <div class="row">
-          {# Folder tree #}
+        <button type="button" class="btn-close" onclick="pwHideModal('pw-picker-modal')" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0">
+        <div class="row g-0">
+          {# Folder tree: vaults are roots; a vault's folders arrive in one flat-list request #}
           <div class="col-4 border-end">
-            <div class="small text-muted mb-2">{% trans "Folders" %}</div>
-            <div id="pw-picker-tree">
+            <div id="pw-picker-tree" class="py-2 overflow-auto" style="max-height: 60vh;">
               <div class="text-center text-muted py-3">
                 <div class="spinner-border spinner-border-sm"></div>
               </div>
             </div>
           </div>
-
-          {# Secret list #}
+          {# Contents: breadcrumbs + direct children of the selected node (or flat search results) #}
           <div class="col-8">
-            <div class="small text-muted mb-2">{% trans "Secrets" %}</div>
-            <div id="pw-picker-list">
+            <nav id="pw-picker-path" class="small border-bottom px-3 py-2 text-truncate"></nav>
+            <div id="pw-picker-list" class="overflow-auto" style="max-height: 56vh;">
               <div class="text-center text-muted py-3">
-                {% trans "Select a folder or search for secrets." %}
+                {% trans "Select a vault or folder on the left, or search for secrets." %}
               </div>
             </div>
           </div>

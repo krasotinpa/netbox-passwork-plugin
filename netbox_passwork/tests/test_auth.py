@@ -1,8 +1,9 @@
 import ast
 import inspect
+import json
 import time
 import warnings
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
 import pytest
 import requests
@@ -339,50 +340,56 @@ class TestSearchItems:
 
     @resp_mock.activate
     def test_success_returns_items(self):
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, json=_wrap({"items": [{"id": "pw1", "name": "Router"}]}))
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, json=_wrap({"items": [{"id": "pw1", "name": "Router"}]}))
 
         result = make_client().search_items("router", _session(access_token="acc", csrf_token="csrf"))
 
         assert result == [{"id": "pw1", "name": "Router"}]
         request = resp_mock.calls[0].request
-        assert parse_qs(urlsplit(request.url).query) == {"query": ["router"]}
+        assert json.loads(request.body) == {"query": "router"}
         assert request.headers["Authorization"] == "Bearer acc"
         assert request.headers["X-CSRF-Token"] == "csrf"
 
     @resp_mock.activate
-    def test_search_query_is_url_encoded(self):
-        """H1: special characters in the query do not inject parameters into the Passwork API."""
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, json=_wrap({"items": []}))
+    def test_search_query_travels_in_the_body_verbatim(self):
+        """H1 successor: the query never touches a URL — a JSON body has no parameter-injection surface."""
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, json=_wrap({"items": []}))
 
         make_client().search_items("test&perPage=9999", _session())
 
-        url = resp_mock.calls[0].request.url
-        # Without encoding the URL would be: .../items/search?query=test&perPage=9999
-        assert "&perPage=9999" not in url, "query not encoded — parameter injection possible"
-        assert "%26" in url, "& must be encoded as %26 in the Passwork API path"
-        assert parse_qs(urlsplit(url).query) == {"query": ["test&perPage=9999"]}
+        request = resp_mock.calls[0].request
+        assert urlsplit(request.url).query == "", "the search request carries no query parameters at all"
+        assert json.loads(request.body) == {"query": "test&perPage=9999"}
+
+    @resp_mock.activate
+    def test_vault_scope_becomes_vault_ids_list(self):
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, json=_wrap({"items": []}))
+
+        make_client().search_items("router", _session(), "v1")
+
+        assert json.loads(resp_mock.calls[0].request.body) == {"query": "router", "vaultIds": ["v1"]}
 
     @resp_mock.activate
     def test_401_raises_session_expired(self):
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, json=_wrap({"errors": []}), status=401)
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, json=_wrap({"errors": []}), status=401)
         with pytest.raises(PassworkSessionExpired):
             make_client().search_items("x", _session())
 
     @resp_mock.activate
     def test_403_raises_access_denied(self):
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, json=_wrap({"errors": []}), status=403)
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, json=_wrap({"errors": []}), status=403)
         with pytest.raises(PassworkAccessDenied):
             make_client().search_items("x", _session())
 
     @resp_mock.activate
     def test_timeout_raises(self):
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, body=requests.Timeout())
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, body=requests.Timeout())
         with pytest.raises(PassworkTimeout):
             make_client().search_items("x", _session())
 
     @resp_mock.activate
     def test_non_json_raises_bad_response(self):
-        resp_mock.add(resp_mock.GET, self.SEARCH_URL, body="<html>502 Bad Gateway</html>", status=502)
+        resp_mock.add(resp_mock.POST, self.SEARCH_URL, body="<html>502 Bad Gateway</html>", status=502)
         with pytest.raises(PassworkBadResponse):
             make_client().search_items("x", _session())
 

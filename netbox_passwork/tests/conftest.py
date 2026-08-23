@@ -60,7 +60,7 @@ def django_db_setup():
 
 class FakeGateway:
     """
-    A programmable Passwork gateway for view tests: the same seven operations as
+    A programmable Passwork gateway for view tests: the same eight operations as
     ``PassworkGateway`` (interface match is verified by a test).
 
     Arguments are operation outcomes by name: a value is returned, an exception
@@ -75,6 +75,7 @@ class FakeGateway:
         "list_vaults": [],
         "search_items": [],
         "list_folder_contents": {"folders": [], "items": []},
+        "list_vault_folders": [],
         "require_session": None,
     }
 
@@ -104,11 +105,14 @@ class FakeGateway:
     def list_vaults(self) -> list:
         return self._run("list_vaults")
 
-    def search_items(self, query: str) -> list:
-        return self._run("search_items", query)
+    def search_items(self, query: str, vault_id: str | None = None) -> list:
+        return self._run("search_items", query, vault_id)
 
     def list_folder_contents(self, vault_id: str, folder_id: str | None = None) -> dict:
         return self._run("list_folder_contents", vault_id, folder_id)
+
+    def list_vault_folders(self, vault_id: str) -> list:
+        return self._run("list_vault_folders", vault_id)
 
     def require_session(self) -> None:
         return self._run("require_session")

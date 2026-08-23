@@ -74,7 +74,7 @@ class TestPickerFlow:
         assert resp.status_code == 200
         found = json.loads(resp.content)
         assert found == FOUND
-        assert fake.calls == [("require_session",), ("search_items", "core")]
+        assert fake.calls == [("require_session",), ("search_items", "core", None)]
 
         resp = self._post_binding(user, {"object_type": "device", "object_id": 42, "passwork_item_id": found[0]["id"]})
         assert resp.status_code == 201
@@ -157,7 +157,7 @@ class TestLoginThenPickerViaGateway:
         mock_passwork_login()
         resp_mock.add(resp_mock.GET, f"{PASSWORK_URL}/api/v1/vaults", json=wrap_passwork_response({"items": VAULTS}))
         resp_mock.add(
-            resp_mock.GET, f"{PASSWORK_URL}/api/v1/items/search", json=wrap_passwork_response({"items": FOUND})
+            resp_mock.POST, f"{PASSWORK_URL}/api/v1/items/search", json=wrap_passwork_response({"items": FOUND})
         )
 
         with override_settings(PLUGINS_CONFIG=self.PLUGIN_CONFIG):
@@ -177,8 +177,8 @@ class TestLoginThenPickerViaGateway:
         assert json.loads(resp.content) == FOUND
         search_call = resp_mock.calls[-1].request
         assert search_call.headers["Authorization"] == "Bearer acc1"
-        assert parse_qs(urlsplit(search_call.url).query) == {"query": ["core router&perPage=9999"]}, (
-            "the request reached Passwork as a single URL-encoded parameter (H1)"
+        assert json.loads(search_call.body) == {"query": "core router&perPage=9999"}, (
+            "the query reached Passwork verbatim in the POST body — no parameter injection surface"
         )
 
     @resp_mock.activate
@@ -241,7 +241,7 @@ class TestLoginThenPickerViaGateway:
         grant_netbox_perm(user, "add_binding")
         mock_passwork_login()
         resp_mock.add(
-            resp_mock.GET,
+            resp_mock.POST,
             f"{PASSWORK_URL}/api/v1/items/search",
             json=wrap_passwork_response({"errors": ["forbidden"]}),
             status=403,
@@ -254,5 +254,5 @@ class TestLoginThenPickerViaGateway:
         assert resp.status_code == 403
         assert json.loads(resp.content) == {
             "code": "pw_access_denied",
-            "detail": "Access denied for /api/v1/items/search?query=router",
+            "detail": "Access denied for /api/v1/items/search",
         }

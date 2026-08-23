@@ -667,116 +667,520 @@ async function pwSubmitTotp() {
 }
 
 // ---------------------------------------------------------------------------
-// Picker
+// Picker — Explorer-style: a folder tree on the left, the selected node's
+// direct children on the right, breadcrumbs, and a debounced global search.
 // ---------------------------------------------------------------------------
 
-async function pwOpenPicker() {
-    pwShowModal('pw-picker-modal');
-    await pwLoadPickerFolders();
+const PW_SEARCH_MIN_CHARS = 3;
+const PW_SEARCH_DEBOUNCE  = window.PW_SEARCH_DEBOUNCE !== undefined ? window.PW_SEARCH_DEBOUNCE : 300;
+
+// All picker state lives for one modal opening (pwOpenPicker resets it): repeated
+// clicks reuse the caches below, closing and reopening the modal fetches everything anew.
+let pwPicker = null;
+
+function pwPickerReset() {
+    pwPicker = {
+        vaults: [],            // [{id, name}]
+        vaultState: {},        // vaultId → 'loading' | 'loaded' | 'denied' | 'error'
+        foldersByVault: {},    // vaultId → [{id, name, parentFolderId}] (flat, one request per vault)
+        open: new Set(),       // expanded tree nodes (vault ids and folder ids)
+        current: null,         // {vaultId, folderId|null} — the selected node
+        contents: {},          // `${vaultId}:${folderId||''}` → {folders, items}
+        searchActive: false,
+        searchSeq: 0,          // stale search responses (older seq) are never rendered
+        searchTimer: null,
+        highlightId: null,     // secret highlighted after "show in folder"
+    };
 }
 
-async function pwLoadPickerFolders() {
-    const tree = document.getElementById('pw-picker-tree');
-    tree.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+async function pwOpenPicker() {
+    pwPickerReset();
+    const search = document.getElementById('pw-picker-search');
+    if (search) search.value = '';
+    const scope = document.getElementById('pw-picker-scope');
+    if (scope) scope.checked = false;
+    document.getElementById('pw-picker-path').textContent = '';
+    document.getElementById('pw-picker-list').innerHTML =
+        '<div class="text-center text-muted py-3">Select a vault or folder on the left, or search for secrets.</div>';
+    pwShowModal('pw-picker-modal');
+    await pwPickerLoadVaults();
+}
 
-    const resp = await pwFetch(`${PW_API_BASE}/picker/folders/`);
-    if (resp.status === 401) {
-        tree.innerHTML = '<div class="text-danger p-2">Authentication required. <a href="#" onclick="pwHideModal(\'pw-picker-modal\');pwShowLoginModal()">Log in</a></div>';
+function pwPickerMessage(container, text, retryFn) {
+    container.innerHTML = '';
+    const box = document.createElement('div');
+    box.className = 'text-muted p-3';
+    const span = document.createElement('span');
+    span.textContent = text;
+    box.appendChild(span);
+    if (retryFn) {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-outline-secondary ms-2';
+        btn.textContent = 'Retry';
+        btn.addEventListener('click', retryFn);
+        box.appendChild(btn);
+    }
+    container.appendChild(box);
+}
+
+// pwFetch aborts on PW_REQUEST_TIMEOUT — surface that as a retryable message
+// that also names the setting to raise for very large vaults.
+const PW_TIMEOUT_MSG = 'Passwork did not answer in time (PW_REQUEST_TIMEOUT).';
+
+function pwPickerSpinner(container) {
+    container.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>';
+}
+
+function pwPickerLoginPrompt(container) {
+    // The only string-built HTML in the picker — static content, no data inside
+    container.innerHTML = '<div class="text-danger p-2">Authentication required. ' +
+        '<a href="#" onclick="pwHideModal(\'pw-picker-modal\');pwShowLoginModal()">Log in</a></div>';
+}
+
+async function pwPickerLoadVaults() {
+    const tree = document.getElementById('pw-picker-tree');
+    pwPickerSpinner(tree);
+
+    let resp;
+    try {
+        resp = await pwFetch(`${PW_API_BASE}/picker/folders/`);
+    } catch {
+        pwPickerMessage(tree, PW_TIMEOUT_MSG, pwPickerLoadVaults);
         return;
     }
-    if (!resp.ok) { tree.innerHTML = '<div class="text-muted p-2">Failed to load folders.</div>'; return; }
+    if (resp.status === 401) { pwPickerLoginPrompt(tree); return; }
+    if (!resp.ok) { pwPickerMessage(tree, 'Failed to load vaults.', pwPickerLoadVaults); return; }
 
-    const folders = await resp.json();
-    tree.innerHTML = '';
-    (Array.isArray(folders) ? folders : []).forEach(folder => {
-        const item = document.createElement('div');
-        item.className = 'p-2 border-bottom cursor-pointer';
-        item.style.cursor = 'pointer';
-        item.textContent = folder.name || folder.id;
-        item.onclick = () => pwLoadPickerContents(folder.id, null);
-        tree.appendChild(item);
-    });
-    if (!tree.children.length) {
-        tree.innerHTML = '<div class="text-muted p-2">No folders found.</div>';
+    const vaults = await resp.json();
+    pwPicker.vaults = Array.isArray(vaults) ? vaults : [];
+    if (!pwPicker.vaults.length) {
+        pwPickerMessage(tree, 'No vaults found.');
+        return;
     }
+    pwPickerRenderTree();
 }
 
-async function pwLoadPickerContents(vaultId, folderId) {
-    const list = document.getElementById('pw-picker-list');
-    list.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
-    let url = `${PW_API_BASE}/picker/folders/${encodeURIComponent(vaultId)}/items/`;
-    if (folderId) url += `?folder_id=${encodeURIComponent(folderId)}`;
-    const resp = await pwFetch(url);
-    if (!resp.ok) { list.innerHTML = '<div class="text-muted p-2">Failed to load secrets.</div>'; return; }
-    const data = await resp.json();
-    pwRenderPickerContents(vaultId, data.folders || [], data.items || []);
+// Loads the vault's flat folder list once per modal opening; 403 marks the
+// vault "no access" in the tree, other vaults keep working.
+async function pwPickerEnsureVaultFolders(vaultId) {
+    if (vaultId in pwPicker.foldersByVault) return true;
+    if (pwPicker.vaultState[vaultId] === 'loading') return false;
+    pwPicker.vaultState[vaultId] = 'loading';
+    pwPickerRenderTree();
+
+    let resp;
+    try {
+        resp = await pwFetch(`${PW_API_BASE}/picker/folders/${encodeURIComponent(vaultId)}/folders/`);
+    } catch {
+        pwPicker.vaultState[vaultId] = 'error';
+        pwPickerRenderTree();
+        return false;
+    }
+    if (resp.status === 401) {
+        pwPickerLoginPrompt(document.getElementById('pw-picker-tree'));
+        return false;
+    }
+    if (resp.status === 403) {
+        pwPicker.vaultState[vaultId] = 'denied';
+        pwPickerRenderTree();
+        return false;
+    }
+    if (!resp.ok) {
+        pwPicker.vaultState[vaultId] = 'error';
+        pwPickerRenderTree();
+        return false;
+    }
+    const folders = await resp.json();
+    pwPicker.foldersByVault[vaultId] = (Array.isArray(folders) ? folders : []).filter(f => f && f.id);
+    pwPicker.vaultState[vaultId] = 'loaded';
+    pwPickerRenderTree();
+    return true;
 }
 
-function pwRenderPickerContents(vaultId, folders, secrets) {
+function pwPickerSortByName(list) {
+    return list.slice().sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+}
+
+function pwPickerChildFolders(vaultId, parentId) {
+    return pwPickerSortByName(
+        (pwPicker.foldersByVault[vaultId] || []).filter(f => (f.parentFolderId || null) === parentId)
+    );
+}
+
+function pwPickerTreeRow({ depth, icon, name, expandable, expanded, active, muted, onSelect, onToggle }) {
+    const row = document.createElement('div');
+    row.className = 'd-flex align-items-center px-2 py-1' + (active ? ' bg-primary-subtle fw-semibold' : '');
+    row.style.paddingLeft = `${8 + depth * 16}px`;
+    row.style.cursor = onSelect ? 'pointer' : 'default';
+
+    const chevron = document.createElement('span');
+    chevron.className = 'pw-tree-toggle me-1';
+    chevron.style.width = '1.1em';
+    chevron.style.display = 'inline-block';
+    if (expandable) {
+        chevron.innerHTML = `<i class="mdi mdi-chevron-${expanded ? 'down' : 'right'}"></i>`;
+        chevron.style.cursor = 'pointer';
+        chevron.addEventListener('click', (e) => { e.stopPropagation(); onToggle(); });
+    }
+
+    const iconEl = document.createElement('i');
+    iconEl.className = `mdi ${icon} me-1`;
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'text-truncate' + (muted ? ' text-muted fst-italic' : '');
+    nameEl.textContent = name;
+
+    row.append(chevron, iconEl, nameEl);
+    if (onSelect) row.addEventListener('click', onSelect);
+    return row;
+}
+
+function pwPickerRenderTree() {
+    const tree = document.getElementById('pw-picker-tree');
+    tree.innerHTML = '';
+    const cur = pwPicker.current;
+
+    const renderFolder = (vaultId, folder, depth) => {
+        const children = pwPickerChildFolders(vaultId, folder.id);
+        const expanded = pwPicker.open.has(folder.id);
+        tree.appendChild(pwPickerTreeRow({
+            depth,
+            icon: 'mdi-folder-outline',
+            name: folder.name || folder.id,
+            expandable: children.length > 0,
+            expanded,
+            active: !!cur && cur.vaultId === vaultId && cur.folderId === folder.id,
+            onSelect: () => pwPickerSelect(vaultId, folder.id),
+            onToggle: () => { pwPicker.open.has(folder.id) ? pwPicker.open.delete(folder.id) : pwPicker.open.add(folder.id); pwPickerRenderTree(); },
+        }));
+        if (expanded) children.forEach(f => renderFolder(vaultId, f, depth + 1));
+    };
+
+    pwPicker.vaults.forEach(vault => {
+        const state = pwPicker.vaultState[vault.id];
+        const denied = state === 'denied';
+        const expanded = pwPicker.open.has(vault.id);
+        tree.appendChild(pwPickerTreeRow({
+            depth: 0,
+            icon: denied ? 'mdi-lock-outline' : 'mdi-safe-square-outline',
+            name: (vault.name || vault.id) + (denied ? ' — no access' : ''),
+            expandable: !denied,
+            expanded,
+            active: !!cur && cur.vaultId === vault.id && cur.folderId === null,
+            muted: denied,
+            onSelect: denied ? null : () => pwPickerSelect(vault.id, null),
+            onToggle: () => pwPickerToggleVault(vault.id),
+        }));
+        if (!expanded || denied) return;
+        if (state === 'loading') {
+            const busy = document.createElement('div');
+            busy.className = 'text-muted small';
+            busy.style.paddingLeft = '24px';
+            busy.innerHTML = '<div class="spinner-border spinner-border-sm my-1"></div>';
+            tree.appendChild(busy);
+        } else if (state === 'error') {
+            const err = document.createElement('div');
+            err.className = 'text-muted small py-1';
+            err.style.paddingLeft = '24px';
+            const label = document.createElement('span');
+            label.textContent = 'Failed to load folders. ';
+            const retry = document.createElement('a');
+            retry.href = '#';
+            retry.textContent = 'Retry';
+            retry.addEventListener('click', (e) => {
+                e.preventDefault();
+                delete pwPicker.vaultState[vault.id];
+                pwPickerEnsureVaultFolders(vault.id);
+            });
+            err.append(label, retry);
+            tree.appendChild(err);
+        } else {
+            pwPickerChildFolders(vault.id, null).forEach(f => renderFolder(vault.id, f, 1));
+        }
+    });
+}
+
+async function pwPickerToggleVault(vaultId) {
+    if (pwPicker.open.has(vaultId)) {
+        pwPicker.open.delete(vaultId);
+        pwPickerRenderTree();
+        return;
+    }
+    pwPicker.open.add(vaultId);
+    await pwPickerEnsureVaultFolders(vaultId);
+    pwPickerRenderTree();
+}
+
+// Breadcrumb chain for a node: [{id: null, name: <vault>}, ...folders down to the node]
+function pwPickerPathChain(vaultId, folderId) {
+    const vault = pwPicker.vaults.find(v => v.id === vaultId);
+    const byId = {};
+    (pwPicker.foldersByVault[vaultId] || []).forEach(f => { byId[f.id] = f; });
+    const chain = [];
+    let f = folderId ? byId[folderId] : null;
+    while (f) {
+        chain.unshift({ id: f.id, name: f.name || f.id });
+        f = f.parentFolderId ? byId[f.parentFolderId] : null;
+    }
+    return [{ id: null, name: vault ? (vault.name || vault.id) : vaultId }, ...chain];
+}
+
+function pwPickerRenderPath() {
+    const nav = document.getElementById('pw-picker-path');
+    nav.innerHTML = '';
+    if (pwPicker.searchActive) {
+        nav.textContent = 'Search results';
+        return;
+    }
+    if (!pwPicker.current) return;
+    const { vaultId, folderId } = pwPicker.current;
+    const chain = pwPickerPathChain(vaultId, folderId);
+    chain.forEach((part, idx) => {
+        if (idx) {
+            const sep = document.createElement('span');
+            sep.className = 'text-muted mx-1';
+            sep.textContent = '/';
+            nav.appendChild(sep);
+        }
+        if (idx === chain.length - 1) {
+            const here = document.createElement('span');
+            here.className = 'fw-semibold';
+            here.textContent = part.name;
+            nav.appendChild(here);
+        } else {
+            const link = document.createElement('a');
+            link.href = '#';
+            link.textContent = part.name;
+            link.addEventListener('click', (e) => { e.preventDefault(); pwPickerSelect(vaultId, part.id); });
+            nav.appendChild(link);
+        }
+    });
+}
+
+// Selecting a node exits search mode, expands the tree down to the node and
+// shows the node's direct children on the right.
+async function pwPickerSelect(vaultId, folderId, highlightId = null) {
+    pwPicker.searchActive = false;
+    pwPicker.searchSeq++;
+    pwPicker.highlightId = highlightId;
+    const search = document.getElementById('pw-picker-search');
+    if (search && search.value) search.value = '';
+
+    pwPicker.current = { vaultId, folderId: folderId || null };
+    pwPicker.open.add(vaultId);
+    await pwPickerEnsureVaultFolders(vaultId);
+    pwPickerPathChain(vaultId, folderId).forEach(part => { if (part.id) pwPicker.open.add(part.id); });
+    pwPickerRenderTree();
+    pwPickerRenderPath();
+    await pwPickerLoadContents(vaultId, folderId || null);
+}
+
+async function pwPickerLoadContents(vaultId, folderId) {
     const list = document.getElementById('pw-picker-list');
+    const key = `${vaultId}:${folderId || ''}`;
+    if (!(key in pwPicker.contents)) {
+        pwPickerSpinner(list);
+        let url = `${PW_API_BASE}/picker/folders/${encodeURIComponent(vaultId)}/items/`;
+        if (folderId) url += `?folder_id=${encodeURIComponent(folderId)}`;
+        let resp;
+        try {
+            resp = await pwFetch(url);
+        } catch {
+            pwPickerMessage(list, PW_TIMEOUT_MSG, () => pwPickerLoadContents(vaultId, folderId));
+            return;
+        }
+        if (resp.status === 401) { pwPickerLoginPrompt(list); return; }
+        if (!resp.ok) {
+            pwPickerMessage(list, 'Failed to load contents.', () => pwPickerLoadContents(vaultId, folderId));
+            return;
+        }
+        const data = await resp.json();
+        pwPicker.contents[key] = { folders: data.folders || [], items: data.items || [] };
+    }
+    // Ignore a response that arrives after the user has already navigated elsewhere
+    if (!pwPicker.current || pwPicker.current.vaultId !== vaultId || pwPicker.current.folderId !== (folderId || null)) return;
+    pwPickerRenderContents(vaultId, pwPicker.contents[key]);
+}
+
+function pwPickerContentsTable(withPath) {
+    const table = document.createElement('table');
+    table.className = 'table table-sm table-hover mb-0';
+    const head = document.createElement('thead');
+    const tr = document.createElement('tr');
+    ['Name', 'Login', ...(withPath ? ['Path'] : []), ''].forEach(text => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        tr.appendChild(th);
+    });
+    head.appendChild(tr);
+    table.appendChild(head);
+    const body = document.createElement('tbody');
+    table.appendChild(body);
+    return { table, body };
+}
+
+function pwPickerBindCell(secret) {
+    const td = document.createElement('td');
+    td.className = 'text-end';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sm btn-primary py-0';
+    btn.innerHTML = '<i class="mdi mdi-link-variant"></i> Bind';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); pwCreateBinding(secret.id); });
+    td.appendChild(btn);
+    return td;
+}
+
+function pwPickerSecretCells(secret, highlighted) {
+    const tdName = document.createElement('td');
+    const icon = document.createElement('i');
+    icon.className = 'mdi mdi-key-outline me-1';
+    const name = document.createElement('span');
+    if (highlighted) name.className = 'fw-bold text-primary';
+    name.textContent = secret.name || secret.id;
+    tdName.append(icon, name);
+
+    const tdLogin = document.createElement('td');
+    tdLogin.className = 'text-muted';
+    tdLogin.textContent = secret.login || '';
+    return [tdName, tdLogin];
+}
+
+function pwPickerRenderContents(vaultId, data) {
+    const list = document.getElementById('pw-picker-list');
+    const folders = pwPickerSortByName(data.folders);
+    const secrets = pwPickerSortByName(data.items);
     list.innerHTML = '';
     if (!folders.length && !secrets.length) {
-        list.innerHTML = '<div class="text-muted p-2">Folder is empty.</div>';
+        pwPickerMessage(list, 'Folder is empty.');
         return;
     }
+    const { table, body } = pwPickerContentsTable(false);
+
     folders.forEach(folder => {
-        const item = document.createElement('div');
-        item.className = 'p-2 border-bottom d-flex align-items-center';
-        item.style.cursor = 'pointer';
-
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        const tdName = document.createElement('td');
         const icon = document.createElement('i');
-        icon.className = 'mdi mdi-folder-outline me-2';
-
+        icon.className = 'mdi mdi-folder-outline me-1';
         const name = document.createElement('span');
         name.textContent = folder.name || folder.id;
-
-        item.append(icon, name);
-        item.onclick = () => pwLoadPickerContents(vaultId, folder.id);
-        list.appendChild(item);
+        tdName.append(icon, name);
+        const tdLogin = document.createElement('td');
+        const tdBind = document.createElement('td');
+        tr.append(tdName, tdLogin, tdBind);
+        tr.addEventListener('click', () => pwPickerSelect(vaultId, folder.id));
+        body.appendChild(tr);
     });
-    secrets.forEach(secret => list.appendChild(pwPickerSecretRow(secret)));
+
+    secrets.forEach(secret => {
+        const tr = document.createElement('tr');
+        tr.append(...pwPickerSecretCells(secret, pwPicker.highlightId === secret.id), pwPickerBindCell(secret));
+        body.appendChild(tr);
+    });
+
+    list.appendChild(table);
 }
 
-async function pwPickerSearch(query) {
-    if (query.length < 2) return;
+// --- Search: debounced, min 3 chars; an empty box returns to the current node ---
+
+function pwPickerSearchInput(value) {
+    const query = value.trim();
+    clearTimeout(pwPicker.searchTimer);
+    if (!query.length) {
+        pwPicker.searchSeq++;
+        pwPickerExitSearch();
+        return;
+    }
+    if (query.length < PW_SEARCH_MIN_CHARS) return;
+    pwPicker.searchTimer = setTimeout(() => pwPickerRunSearch(query), PW_SEARCH_DEBOUNCE);
+}
+
+function pwPickerExitSearch() {
+    pwPicker.searchActive = false;
+    pwPickerRenderPath();
     const list = document.getElementById('pw-picker-list');
-    list.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
-    const resp = await pwFetch(`${PW_API_BASE}/picker/search/?q=${encodeURIComponent(query)}`);
-    if (!resp.ok) { list.innerHTML = '<div class="text-muted p-2">Search failed.</div>'; return; }
+    if (pwPicker.current) {
+        pwPickerLoadContents(pwPicker.current.vaultId, pwPicker.current.folderId);
+    } else {
+        list.innerHTML =
+            '<div class="text-center text-muted py-3">Select a vault or folder on the left, or search for secrets.</div>';
+    }
+}
+
+function pwPickerScopeChanged() {
+    const search = document.getElementById('pw-picker-search');
+    const query = search ? search.value.trim() : '';
+    if (pwPicker.searchActive && query.length >= PW_SEARCH_MIN_CHARS) pwPickerRunSearch(query);
+}
+
+async function pwPickerRunSearch(query) {
+    const seq = ++pwPicker.searchSeq;
+    pwPicker.searchActive = true;
+    pwPicker.highlightId = null;
+    pwPickerRenderPath();
+    const list = document.getElementById('pw-picker-list');
+    pwPickerSpinner(list);
+
+    let url = `${PW_API_BASE}/picker/search/?q=${encodeURIComponent(query)}`;
+    const scope = document.getElementById('pw-picker-scope');
+    if (scope && scope.checked && pwPicker.current) {
+        url += `&vault_id=${encodeURIComponent(pwPicker.current.vaultId)}`;
+    }
+
+    let resp;
+    try {
+        resp = await pwFetch(url);
+    } catch {
+        if (seq !== pwPicker.searchSeq) return;
+        pwPickerMessage(list, PW_TIMEOUT_MSG, () => pwPickerRunSearch(query));
+        return;
+    }
+    if (seq !== pwPicker.searchSeq) return;  // a newer search or navigation superseded this one
+    if (resp.status === 401) { pwPickerLoginPrompt(list); return; }
+    if (!resp.ok) {
+        pwPickerMessage(list, 'Search failed.', () => pwPickerRunSearch(query));
+        return;
+    }
     const data = await resp.json();
-    pwRenderPickerSecrets(Array.isArray(data) ? data : []);
+    if (seq !== pwPicker.searchSeq) return;
+    pwPickerRenderSearchResults(Array.isArray(data) ? data : []);
 }
 
-function pwPickerSecretRow(secret) {
-    const item = document.createElement('div');
-    item.className = 'p-2 border-bottom d-flex justify-content-between align-items-center';
-
-    const info = document.createElement('div');
-
-    const nameDiv = document.createElement('div');
-    nameDiv.className = 'fw-semibold';
-    nameDiv.textContent = secret.name || secret.id;
-
-    const loginSmall = document.createElement('small');
-    loginSmall.className = 'text-muted';
-    loginSmall.textContent = secret.login || '';
-
-    info.append(nameDiv, loginSmall);
-
-    const bindBtn = document.createElement('button');
-    bindBtn.className = 'btn btn-sm btn-primary';
-    bindBtn.innerHTML = '<i class="mdi mdi-link-variant"></i> Bind';
-    bindBtn.addEventListener('click', () => pwCreateBinding(secret.id));
-
-    item.append(info, bindBtn);
-    return item;
+function pwPickerSearchResultPath(secret) {
+    if (Array.isArray(secret.path)) {
+        return secret.path.map(p => (p && p.name) || '').filter(Boolean).join(' / ');
+    }
+    const vault = pwPicker.vaults.find(v => v.id === secret.vaultId);
+    return vault ? (vault.name || vault.id) : '';
 }
 
-function pwRenderPickerSecrets(secrets) {
+function pwPickerRenderSearchResults(secrets) {
     const list = document.getElementById('pw-picker-list');
     list.innerHTML = '';
-    if (!secrets.length) { list.innerHTML = '<div class="text-muted p-2">No secrets found.</div>'; return; }
-    secrets.forEach(secret => list.appendChild(pwPickerSecretRow(secret)));
+    if (!secrets.length) {
+        pwPickerMessage(list, 'No secrets found.');
+        return;
+    }
+    const { table, body } = pwPickerContentsTable(true);
+    secrets.forEach(secret => {
+        const tr = document.createElement('tr');
+        const tdPath = document.createElement('td');
+        tdPath.className = 'text-muted small';
+        tdPath.textContent = pwPickerSearchResultPath(secret);
+        const [tdName, tdLogin] = pwPickerSecretCells(secret, false);
+        tr.append(tdName, tdLogin, tdPath, pwPickerBindCell(secret));
+        // "Show in folder": jump to the secret's folder with the tree expanded
+        if (secret.vaultId) {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => pwPickerShowInFolder(secret));
+        }
+        body.appendChild(tr);
+    });
+    list.appendChild(table);
+}
+
+async function pwPickerShowInFolder(secret) {
+    await pwPickerSelect(secret.vaultId, secret.folderId || null, secret.id);
 }
 
 // ---------------------------------------------------------------------------

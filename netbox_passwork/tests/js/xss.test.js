@@ -320,28 +320,41 @@ describe('pwRevealSecret — XSS in revealed password', () => {
 });
 
 // ---------------------------------------------------------------------------
-// pwRenderPickerSecrets — C1: secret.name / secret.login via innerHTML (lines 625-626)
+// pwPickerRenderSearchResults — C1: secret.name / login / path rendered as text
 // ---------------------------------------------------------------------------
 
-describe('pwRenderPickerSecrets — XSS in picker secret name/login', () => {
+describe('pwPickerRenderSearchResults — XSS in picker search results', () => {
 
     test('secret name with XSS payload renders as text', () => {
         const win = makeWindow();
-        win.pwRenderPickerSecrets([
+        win.pwPickerReset();
+        win.pwPickerRenderSearchResults([
             { id: 'abc', name: XSS_IMG, login: 'user' },
         ]);
         const list = win.document.getElementById('pw-picker-list');
         assertNoXssNode(list, 'picker secret name');
-        assertXssNotExecuted(win, 'pwRenderPickerSecrets name');
+        assertXssNotExecuted(win, 'pwPickerRenderSearchResults name');
     });
 
     test('secret login with XSS payload renders as text', () => {
         const win = makeWindow();
-        win.pwRenderPickerSecrets([
+        win.pwPickerReset();
+        win.pwPickerRenderSearchResults([
             { id: 'abc', name: 'safe', login: XSS_IMG },
         ]);
         const list = win.document.getElementById('pw-picker-list');
         assertNoXssNode(list, 'picker secret login');
-        assertXssNotExecuted(win, 'pwRenderPickerSecrets login');
+        assertXssNotExecuted(win, 'pwPickerRenderSearchResults login');
+    });
+
+    test('secret path with XSS payload renders as text', () => {
+        const win = makeWindow();
+        win.pwPickerReset();
+        win.pwPickerRenderSearchResults([
+            { id: 'abc', name: 'safe', login: 'user', vaultId: 'v1', path: [{ name: XSS_IMG }] },
+        ]);
+        const list = win.document.getElementById('pw-picker-list');
+        assertNoXssNode(list, 'picker secret path');
+        assertXssNotExecuted(win, 'pwPickerRenderSearchResults path');
     });
 });
