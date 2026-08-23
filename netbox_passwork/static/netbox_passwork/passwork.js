@@ -1233,7 +1233,25 @@ async function pwCopyCustomField(pwId, fieldName) {
     await pwCopyValue(value);
 }
 
+// Auto-hide timers of revealed detail-card fields — one per field span (issue #30)
+const _pwCfRevealTimers = new WeakMap();
+
 async function pwRevealCustomField(btn, pwId, fieldName) {
+    const span = btn.previousElementSibling;
+    if (!span || !span.classList.contains('pw-cf-secret')) return;
+
+    function hideCf() {
+        span.textContent = '•••••••••';
+        btn.innerHTML = '<i class="mdi mdi-eye-outline"></i>';
+    }
+
+    // Hiding needs no data — no request, no extra reveal audit entry
+    if (span.textContent !== '•••••••••') {
+        clearTimeout(_pwCfRevealTimers.get(span));
+        hideCf();
+        return;
+    }
+
     const url = `${PW_API_BASE}/secrets/${encodeURIComponent(pwId)}/detail/` +
         `?object_type=${PW_OBJECT_TYPE}&object_id=${PW_OBJECT_ID}&reveal=true`;
     const resp = await pwFetch(url);
@@ -1247,17 +1265,10 @@ async function pwRevealCustomField(btn, pwId, fieldName) {
         const cf = (data.custom_fields || []).find(f => f.name === fieldName);
         value = cf ? cf.value || '' : '';
     }
-    const span = btn.previousElementSibling;
-    if (span && span.classList.contains('pw-cf-secret')) {
-        const isRevealed = span.textContent !== '•••••••••';
-        if (isRevealed) {
-            span.textContent = '•••••••••';
-            btn.innerHTML = '<i class="mdi mdi-eye-outline"></i>';
-        } else {
-            span.textContent = value || '—';
-            btn.innerHTML = '<i class="mdi mdi-eye-off-outline"></i>';
-        }
-    }
+    span.textContent = value || '—';
+    btn.innerHTML = '<i class="mdi mdi-eye-off-outline"></i>';
+    clearTimeout(_pwCfRevealTimers.get(span));
+    _pwCfRevealTimers.set(span, setTimeout(hideCf, PW_REVEAL_TIMEOUT));
 }
 
 async function pwDeleteBinding(pwId) {

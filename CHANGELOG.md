@@ -10,6 +10,9 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 - **Breaking / security (#1):** every object-scoped operation (secrets list, secret detail, reveal, copy, binding create, binding delete) now also requires `view` access to the bound NetBox object (`dcim.view_device` / `virtualization.view_virtualmachine` / `ipam.view_service`), evaluated against the user's `ObjectPermission` constraints (ADR-0002). Users relying on plugin permissions alone, without a `view` permission on the object type, **lose access to those secrets** — grant the object `view` permission (constrained or not) alongside the plugin permissions. An object outside the user's constraints now answers `404 object_not_found` (matching NetBox core behaviour; `binding_not_found` on binding deletion), checked before the binding lookup so binding existence is not disclosed. Bindings whose object was deleted are unreadable but remain deletable with `delete_binding` alone
 - `POST bindings/` now validates the target: a non-integer `object_id` returns `400 invalid_object_id`, and a missing (or hidden) object returns `404 object_not_found` instead of creating a dangling binding
 
+### Fixed
+- Secret custom fields (and the Password row of the detail card) now re-mask automatically after `SECRET_REVEAL_TIMEOUT`, the same way the main password does — previously a revealed value stayed on screen until the eye icon was clicked again (#30). Hiding a field no longer sends an extra reveal request, so it no longer writes a spurious audit entry
+
 ## [1.5.0] — 2026-08-23
 
 ### Changed
