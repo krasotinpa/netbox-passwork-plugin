@@ -388,8 +388,21 @@ class PickerFolderContentsView(PassworkView):
         return JsonResponse(self.gateway.list_folder_contents(vault_id, folder_id))
 
 
+class PickerVaultFoldersView(PassworkView):
+    """
+    GET /picker/folders/<vault_id>/folders/ — the vault's flat folder list for the picker tree;
+    body — array of {"id", "name", "parentFolderId"}.
+    """
+
+    permission_required = "add_binding"
+
+    def get(self, request, vault_id):
+        # Passwork failures (401/403/504/502) are turned into {"code","detail"} by the base view
+        return JsonResponse(self.gateway.list_vault_folders(vault_id), safe=False)
+
+
 class PickerSearchView(PassworkView):
-    """GET /picker/search/?q=... — search Passwork items; body — array of found items."""
+    """GET /picker/search/?q=...[&vault_id=...] — search Passwork items; body — array of found items."""
 
     permission_required = "add_binding"
 
@@ -398,8 +411,9 @@ class PickerSearchView(PassworkView):
         if not query:
             return _error("missing_query", "Query parameter q is required", 400)
 
-        # URL-encoding the query is the client's responsibility (H1); Passwork failures are turned into a response by the base view
-        return JsonResponse(self.gateway.search_items(query), safe=False)
+        vault_id = request.GET.get("vault_id", "").strip() or None
+        # The query goes to Passwork in a POST body (no URL-encoding concerns); Passwork failures are turned into a response by the base view
+        return JsonResponse(self.gateway.search_items(query, vault_id), safe=False)
 
 
 # ---------------------------------------------------------------------------

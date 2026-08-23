@@ -18,8 +18,9 @@ Every response is `application/json` (`django.http.JsonResponse`).
 | POST | `bindings/` | `BindingsCreateView` | `add_binding` (`netbox_passwork.add_binding_passworkbinding`) | Create a binding between a Passwork item and a NetBox object |
 | DELETE | `bindings/<int:binding_id>/` | `BindingsDeleteView` | `delete_binding` (`netbox_passwork.delete_binding_passworkbinding`) | Delete a binding (hard delete; the event is recorded in NetBox's standard changelog) |
 | GET | `picker/folders/` | `PickerFoldersView` | `add_binding` | List Passwork vaults — through the gateway (`PassworkGateway.list_vaults()` → `/api/v1/vaults`) |
-| GET | `picker/folders/<str:vault_id>/items/` | `PickerFolderContentsView` | `add_binding` | Contents of a vault, or of one of its folders with `?folder_id=...`: `{"folders": [direct subfolders], "items": [passwords]}` — through the gateway (`PassworkGateway.list_folder_contents()` → `/api/v1/folders?vaultId=...` + `/api/v1/items?vaultId=...[&folderId=...]`) |
-| GET | `picker/search/` | `PickerSearchView` | `add_binding` | Search Passwork items by string — through the gateway (`PassworkGateway.search_items()` → `/api/v1/items/search`) |
+| GET | `picker/folders/<str:vault_id>/items/` | `PickerFolderContentsView` | `add_binding` | Direct children of a vault node, or of one of its folders with `?folder_id=...`: `{"folders": [direct subfolders], "items": [direct passwords]}` — through the gateway (`PassworkGateway.list_folder_contents()` → `/api/v1/folders?vaultId=...` + `/api/v1/items?vaultId=...[&folderId=...]`; for the vault node the items are filtered to `folderId=null` — Passwork has no "root only" parameter) |
+| GET | `picker/folders/<str:vault_id>/folders/` | `PickerVaultFoldersView` | `add_binding` | The vault's flat folder list for the picker tree, `[{"id", "name", "parentFolderId"}, ...]` — through the gateway (`PassworkGateway.list_vault_folders()` → `/api/v1/folders?vaultId=...`) |
+| GET | `picker/search/` | `PickerSearchView` | `add_binding` | Search Passwork items by string, optionally scoped to one vault with `?vault_id=...` — through the gateway (`PassworkGateway.search_items()` → `POST /api/v1/items/search` with the query, and the scope as `vaultIds`, in the JSON body) |
 | GET | `audit/` | `AuditLogView` | `view_auditlog` | Audit log of `reveal`/`copy` actions performed on secrets |
 
 Every permission is a standard NetBox object permission on the `PassworkBinding` model,
@@ -56,8 +57,10 @@ Request body — JSON:
 
 - `q` (query, string, required) — the search string; an empty value returns `400 missing_query`. This
   check happens **after** the Passwork session check: with no session the view responds `401`, not
-  `400`. Encoding the query string is the client's job (`PassworkAuthClient.search_items`); the view
-  passes `q` through as-is (after `strip()`).
+  `400`. The view passes `q` through as-is (after `strip()`); the client sends it to Passwork in
+  the POST body (`PassworkAuthClient.search_items`), so no URL encoding is involved.
+- `vault_id` (query, string, optional) — scope the search to one vault; a blank value means a
+  global search. Becomes a one-element `vaultIds` list in the Passwork request body.
 
 ### Pagination (`limit`/`offset` in `audit/`)
 
@@ -93,7 +96,7 @@ response bodies are unchanged.
 | 401 | `invalid_credentials` | `PassworkLoginView` | `Invalid credentials` (or `CSRF error: …`, if Passwork already refused to issue a CSRF token — text from the client exception) |
 | 401 | `invalid_totp` | `PassworkTotpView` | `Invalid TOTP code` |
 | 403 | `netbox_permission_denied` | every view with a required permission; `SecretDetailView` — separately, when `reveal=true` without `reveal_secret` | `Permission denied` |
-| 403 | `pw_access_denied` | `SecretDetailView` (`get_item`), `PickerFoldersView`/`PickerSearchView` | `Access denied for /api/v1/...` |
+| 403 | `pw_access_denied` | `SecretDetailView` (`get_item`), `PickerFoldersView`/`PickerVaultFoldersView`/`PickerSearchView` | `Access denied for /api/v1/...` |
 | 404 | `binding_not_found` | `SecretDetailView`, `SecretCopyView`, `BindingsDeleteView` | `Binding not found` |
 | 405 | — | `PassworkView`: unsupported method (a plain Django `HttpResponseNotAllowed` response with an `Allow` header, no JSON body) | — |
 | 409 | `duplicate_binding` | `BindingsCreateView` | `Binding already exists` |
@@ -117,14 +120,14 @@ Additional notes:
 - `PassworkAccessDenied` maps to **401** during login/TOTP (`invalid_credentials`/
   `invalid_totp` — the operation overrides the context) and to **403** (`pw_access_denied`)
   when accessing a secret or the picker (`SecretDetailView`, `PickerFoldersView`/
-  `PickerSearchView`) — depending on the calling context.
+  `PickerVaultFoldersView`/`PickerSearchView`) — depending on the calling context.
 
 ## 4. Authentication
 
 - Every view except `PassworkLoginView` and `PassworkTotpView` requires:
   1. An authenticated NetBox user (`request.user.is_authenticated`) — otherwise `401 not_authenticated` (`RequireNetboxPermMixin.dispatch`).
   2. The user holding the corresponding NetBox object permission — otherwise `403 netbox_permission_denied`.
-  3. For views that talk to Passwork (`PassworkLoginView`, `PassworkTotpView`, `SecretDetailView`, `SecretCopyView`, `PickerFoldersView`, `PickerSearchView`) — a valid Passwork session in the Django session (`request.session["pw_session"]`, except for `PassworkLoginView`, which doesn't need one yet). All of them go through the base `PassworkView` (ADR-0001), and `dispatch` runs the same sequence of checks every time: NetBox permissions → 405 for an unsupported method (`OPTIONS` doesn't require a Passwork session) → Passwork session (`self.gateway.require_session()`, via `PassworkGateway`) → the view method's own parameters/body. Passwork failures (`PassworkError`) are turned into `{"code","detail"}` at the same point. A missing or expired Passwork session results in a `401` (`pw_not_authenticated`/`pw_session_expired`).
+  3. For views that talk to Passwork (`PassworkLoginView`, `PassworkTotpView`, `SecretDetailView`, `SecretCopyView`, `PickerFoldersView`, `PickerFolderContentsView`, `PickerVaultFoldersView`, `PickerSearchView`) — a valid Passwork session in the Django session (`request.session["pw_session"]`, except for `PassworkLoginView`, which doesn't need one yet). All of them go through the base `PassworkView` (ADR-0001), and `dispatch` runs the same sequence of checks every time: NetBox permissions → 405 for an unsupported method (`OPTIONS` doesn't require a Passwork session) → Passwork session (`self.gateway.require_session()`, via `PassworkGateway`) → the view method's own parameters/body. Passwork failures (`PassworkError`) are turned into `{"code","detail"}` at the same point. A missing or expired Passwork session results in a `401` (`pw_not_authenticated`/`pw_session_expired`).
 - `PassworkLoginView` and `PassworkTotpView` only require an authenticated NetBox user — `PassworkLoginView` doesn't need a Passwork session yet; `PassworkTotpView` only expects the `pw_session` obtained at the login step, so it can continue the flow.
 - The plugin does not disable Django's standard CSRF protection (there's no `csrf_exempt` anywhere in the code), so every `POST`/`DELETE` request (`auth/login/`, `auth/totp/`, `secrets/<pw_id>/copy/`, `bindings/`, `bindings/<id>/`) requires a valid CSRF token, the same as any other request within NetBox.
 - The Passwork session itself (access/refresh tokens, Passwork's CSRF token) is stored in the Django session in encrypted form — encryption/decryption is handled by `PassworkGateway` ([gateway.py](../netbox_passwork/gateway.py)) using the `SESSION_ENCRYPT_KEY` from the plugin configuration; the client (`PassworkAuthClient`) has no involvement in session encryption.

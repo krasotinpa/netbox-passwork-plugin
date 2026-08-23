@@ -330,11 +330,12 @@ class TestReleaseScenarioViaGateway:
         resp_mock.add(
             resp_mock.GET, f"{PASSWORK_URL}/api/v1/vaults", json=wrap_passwork_response({"items": [{"id": "v1"}]})
         )
-        # The test login search (query=_totp_check_) is already mocked in mock_passwork_login; this response is for the picker only
+        # The test login search is a GET (query=_totp_check_), mocked in mock_passwork_login;
+        # the picker search uses the POST variant with the query in the JSON body
         resp_mock.add(
-            resp_mock.GET,
+            resp_mock.POST,
             f"{PASSWORK_URL}/api/v1/items/search",
-            match=[matchers.query_param_matcher({"query": "edge"})],
+            match=[matchers.json_params_matcher({"query": "edge"})],
             json=wrap_passwork_response({"items": [{"id": "pw_new_001", "name": "Edge Router"}]}),
         )
         secrets_q = {"object_type": "device", "object_id": "1"}

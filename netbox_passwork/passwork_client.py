@@ -254,18 +254,50 @@ class PassworkAuthClient:
         data, _ = self._get_as_session(path, session_data)
         return data.get("items", []) if isinstance(data, dict) else []
 
+    def _post_as_session(self, path: str, data: dict, session_data: dict) -> tuple:
+        """POST on behalf of the Passwork session: 401 → session expired, 403 → access denied."""
+        body, r = self._post(path, data, self._auth_headers(session_data))
+        logger.debug("POST %s status=%s", path, r.status_code)
+        if r.status_code == 401:
+            raise PassworkSessionExpired(f"Token expired or TOTP required for {path}")
+        if r.status_code == 403:
+            raise PassworkAccessDenied(f"Access denied for {path}")
+        return body, r
+
     def list_vaults(self, session_data: dict) -> list:
         """List of Passwork vaults."""
         return self._get_items("/api/v1/vaults", session_data)
 
-    def search_items(self, query: str, session_data: dict) -> list:
-        """Search items; the query is URL-encoded (H1: `&`/`=` don't inject parameters)."""
-        return self._get_items(f"/api/v1/items/search?query={urllib.parse.quote(query, safe='')}", session_data)
+    def search_items(self, query: str, session_data: dict, vault_id: str | None = None) -> list:
+        """
+        Search items via the POST variant (Api reference §13.29): the query and the optional
+        one-vault scope (``vaultIds``) travel in the JSON body — array encoding for the GET
+        variant is undocumented, and a JSON body has no parameter-injection surface.
+        """
+        body = {"query": query}
+        if vault_id:
+            body["vaultIds"] = [vault_id]
+        data, _ = self._post_as_session("/api/v1/items/search", body, session_data)
+        return data.get("items", []) if isinstance(data, dict) else []
+
+    def list_vault_folders(self, vault_id: str, session_data: dict) -> list:
+        """
+        The vault's flat folder list (Api reference §11.5): ``[{"id", "name", "parentFolderId"}]``.
+        One request covers the whole vault — the picker builds the tree from ``parentFolderId``
+        (``None`` for the vault root) on the client.
+        """
+        folders = self._get_items(f"/api/v1/folders?vaultId={urllib.parse.quote(vault_id, safe='')}", session_data)
+        return [
+            {"id": f.get("id", ""), "name": f.get("name", ""), "parentFolderId": f.get("parentFolderId") or None}
+            for f in folders
+            if isinstance(f, dict)
+        ]
 
     def list_folder_contents(self, vault_id: str, folder_id: str | None, session_data: dict) -> dict:
         """
         Direct subfolders and passwords of a vault (``folder_id is None``) or of one of its folders:
-        ``{"folders": [{"id", "name"}, ...], "items": [<Passwork items>]}``.
+        ``{"folders": [{"id", "name"}, ...], "items": [<Passwork items>]}``. Both node kinds show
+        only their direct children — Explorer semantics.
 
         Both come from listing endpoints (Api reference §11.5/§13.6), not from text search:
 
@@ -273,9 +305,9 @@ class PassworkAuthClient:
           filtered here to the node's direct children by ``parentFolderId`` (``null`` for the
           root of the vault);
         - passwords — ``GET /api/v1/items?vaultId=...``, adding ``&folderId=...`` for a folder
-          node. For the vault node (no ``folderId``) Passwork returns every password in the
-          vault, so the vault view already shows the passwords of its subfolders; a folder node
-          shows the passwords directly in that folder (drill into a subfolder for the rest).
+          node. Passwork has no "root only" parameter — without ``folderId`` it returns every
+          password in the vault — so for the vault node the response is filtered here to the
+          items whose own ``folderId`` is null (the root's direct passwords).
         """
         vault_q = urllib.parse.quote(vault_id, safe="")
         folders = self._get_items(f"/api/v1/folders?vaultId={vault_q}", session_data)
@@ -288,4 +320,6 @@ class PassworkAuthClient:
         if folder_id:
             items_path += f"&folderId={urllib.parse.quote(folder_id, safe='')}"
         items = self._get_items(items_path, session_data)
+        if folder_id is None:
+            items = [i for i in items if isinstance(i, dict) and not i.get("folderId")]
         return {"folders": children, "items": items}

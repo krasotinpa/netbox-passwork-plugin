@@ -7,7 +7,7 @@ API: the client, the login and 2FA flow, token refresh, secret retrieval, helper
 Key files:
 
 - [gateway.py](../netbox_passwork/gateway.py) — the Passwork gateway (ADR-0001): the Passwork
-  session (Fernet encryption, storage in the Django session, renewal) and seven operations.
+  session (Fernet encryption, storage in the Django session, renewal) and eight operations.
 - [passwork_client.py](../netbox_passwork/passwork_client.py) — a pure HTTP client for the
   Passwork API, with no Django and no session encryption.
 - [utils.py](../netbox_passwork/utils.py) — helper functions (client IP); no longer involved in
@@ -232,33 +232,37 @@ which calls the client's public operations:
   node's direct children by `parentFolderId`, which is `null` at the vault root) and
   `GET /api/v1/items?vaultId=<vault_id>` for the vault node, or
   `GET /api/v1/items?vaultId=<vault_id>&folderId=<folder_id>` for a folder node. The response is
-  `{"folders": [{"id", "name"}, ...], "items": [...]}`. For the vault node Passwork returns every
-  password in the vault (so the vault view already shows the passwords of its subfolders); a
-  folder node shows the passwords directly in that folder, and clicking a subfolder drills down.
-  The `folderId`/`parentFolderId` fields and the folder-listing shape are taken from the
-  `Api reference.pdf` shipped inside a Passwork installation
+  `{"folders": [{"id", "name"}, ...], "items": [...]}` — **direct children only** (Explorer
+  semantics): Passwork has no "root only" parameter and without `folderId` returns every password
+  in the vault, so for the vault node the client filters the items down to those whose own
+  `folderId` is null. The `folderId`/`parentFolderId` fields and the folder-listing shape are
+  taken from the `Api reference.pdf` shipped inside a Passwork installation
   (`/var/www/files/api-schema/` on Linux; §11.5 GET /v1/folders, §13.6 GET /v1/items).
-- **`PickerSearchView`** (`GET /picker/search/?q=...` in the plugin) →
-  `PassworkGateway.search_items(query)` → the `search_items(query, session_data)` client method →
-  `GET /api/v1/items/search?query=<query>` — full-text search over secrets.
+- **`PickerVaultFoldersView`** (`GET /picker/folders/<vault_id>/folders/`) →
+  `PassworkGateway.list_vault_folders(vault_id)` → the `list_vault_folders(vault_id,
+  session_data)` client method → `GET /api/v1/folders?vaultId=<vault_id>` — the vault's **flat**
+  folder list, normalized to `[{"id", "name", "parentFolderId"}, ...]`. One request per vault:
+  the picker's JS builds the whole tree (and the breadcrumbs) from `parentFolderId` on the
+  client, so expanding folders costs no extra requests.
+- **`PickerSearchView`** (`GET /picker/search/?q=...[&vault_id=...]` in the plugin) →
+  `PassworkGateway.search_items(query, vault_id)` → the `search_items(query, session_data,
+  vault_id)` client method → `POST /api/v1/items/search` (Api reference §13.29) with
+  `{"query": ..., "vaultIds": [...]}` in the JSON body — full-text search over secrets,
+  optionally scoped to one vault. The POST variant is used because array-parameter encoding for
+  the GET variant is not documented; search results carry `vaultId`, `folderId` and the full
+  `path`, which the picker uses for the "show in folder" jump without extra requests.
 
 The client operations return Passwork's `items` lists, and 401/403 from Passwork are translated
 into `PassworkSessionExpired`/`PassworkAccessDenied` (same as `get_item`).
 
-The search string is encoded with `urllib.parse.quote(query, safe="")` before being substituted
-into the URL — only inside the client (`search_items` for the query, `list_folder_contents` for
-the vault/folder ids):
+Vault and folder ids are encoded with `urllib.parse.quote(..., safe="")` before being
+substituted into a URL — only inside the client (`list_folder_contents`, `list_vault_folders`).
+The search query never touches a URL at all: it travels in the POST body, so it has no
+query-parameter injection surface. (Historically the search used the GET variant, and encoding
+the query was a v1.0.13 injection fix — without it, characters such as `&`, `#`, or a space in
+`q` made it possible to inject extra query parameters, e.g. `q=x&perPage=100000`.)
 
-```python
-f"/api/v1/items/search?query={urllib.parse.quote(query, safe='')}"
-```
-
-This is a query-parameter injection fix (released in v1.0.13): without encoding, the `q` value
-from `request.GET` (already URL-decoded by Django) was substituted into the URL as-is, and
-characters such as `&`, `#`, or a space made it possible to inject extra query parameters into the
-request to Passwork (for example, `q=x&perPage=100000`).
-
-Passwork failures in both picker views are translated into HTTP responses by the base
+Passwork failures in all picker views are translated into HTTP responses by the base
 `PassworkView` (a uniform `{"code", "detail"}` shape): `PassworkSessionExpired` → `401
 pw_session_expired`, `PassworkAccessDenied` → `403 pw_access_denied` (the picker used to return
 `200` with an empty list), `PassworkTimeout` → `504 pw_timeout`, `PassworkBadResponse` → `502
