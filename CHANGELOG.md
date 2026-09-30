@@ -6,6 +6,8 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-09-30
+
 ### Added
 - Support for NetBox 4.7: the full test suite passes on NetBox 4.7.2 (Django 6.1) with no code changes, and the Passwork tabs on Device, Virtual Machine and Service were checked in a browser. CI now tests NetBox 4.5.10, 4.6.10 and 4.7.2 on Python 3.12 / 3.14
 - README: NetBox 4.7 needs PostgreSQL 15+; the compatibility table now covers 1.3–1.6 and 1.7
