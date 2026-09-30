@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ["3.12", "3.14"]
-        netbox: ["v4.5.10", "v4.6.8"]
+        netbox: ["v4.5.10", "v4.6.10", "v4.7.2"]
     services:
       postgres:
         image: postgres:17-alpine
