@@ -12,7 +12,7 @@ changes make their way into `main`.
 |---|---|---|
 | Python | ≥ 3.12 | `requires-python` in [pyproject.toml](../pyproject.toml) |
 | NetBox | ≥ 4.5 | `min_version = "4.5"` in [netbox_passwork/config.py](../netbox_passwork/config.py) |
-| PostgreSQL | 14+ | [README.md](../README.md) |
+| PostgreSQL | 14+ (15+ with NetBox 4.7) | [README.md](../README.md) |
 | Passwork | 7.6+ (CSE off) | [README.md](../README.md) |
 
 The plugin is a NetBox Django plugin, not a standalone application. `pytest.ini` sets
@@ -263,7 +263,7 @@ pull request, with four jobs:
 | `ruff` | `scripts/test.sh lint` with `ruff` pinned to the version in `.pre-commit-config.yaml` |
 | `JS tests` | `npm install` + `scripts/test.sh js` (node 22, jsdom) |
 | `build + twine check` | `python -m build` and `twine check dist/*` — validates the package metadata |
-| `pytest` | the full Python suite against a real NetBox, as a matrix of NetBox 4.5/4.6 × Python 3.12/3.14 |
+| `pytest` | the full Python suite against a real NetBox, as a matrix of NetBox 4.5/4.6/4.7 × Python 3.12/3.14 |
 
 The `pytest` job builds the environment the suite needs: `postgres` and `redis` service containers
 (Redis is not optional — `test_changelog.py` goes through the full middleware stack, and NetBox's

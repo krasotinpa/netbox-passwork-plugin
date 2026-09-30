@@ -14,23 +14,24 @@ allowing users to view, reveal, and copy secrets from Passwork without leaving N
 
 ## Requirements
 
-| Component   | Version       |
-|-------------|---------------|
-| NetBox      | 4.5+          |
-| Python      | 3.12+         |
-| PostgreSQL  | 14+           |
-| Passwork    | 7.6+ (CSE off)|
+| Component  | Version                   |
+|------------|---------------------------|
+| NetBox     | 4.5+                      |
+| Python     | 3.12+                     |
+| PostgreSQL | 14+ (15+ with NetBox 4.7) |
+| Passwork   | 7.6+ (CSE off)            |
 
 ### Compatibility
 
-| Plugin  | NetBox    | Python      | Tested in CI                           |
-|---------|-----------|-------------|----------------------------------------|
-| 1.3.x   | 4.5 – 4.6 | 3.12 – 3.14 | NetBox 4.5.10 and 4.6.8 on 3.12 / 3.14 |
-| 1.0–1.2 | 4.5       | 3.11+       | not covered by CI                      |
+| Plugin  | NetBox    | Python      | Tested in CI                                   |
+|---------|-----------|-------------|------------------------------------------------|
+| 1.7.x   | 4.5 – 4.7 | 3.12 – 3.14 | NetBox 4.5.10, 4.6.10 and 4.7.2 on 3.12 / 3.14 |
+| 1.3–1.6 | 4.5 – 4.6 | 3.12 – 3.14 | NetBox 4.5.10 and 4.6.8 on 3.12 / 3.14         |
+| 1.0–1.2 | 4.5       | 3.11+       | not covered by CI                              |
 
 Every pull request runs the full test suite against the NetBox versions in the table above — see
 [.github/workflows/ci.yml](.github/workflows/ci.yml). Python 3.12 is the floor because NetBox 4.5
-requires it.
+requires it. NetBox 4.7 additionally requires PostgreSQL 15+.
 
 ### Dependencies
 
