@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 class PassworkError(Exception):
     """
     Base exception of the Passwork gateway: a Passwork failure carrying HTTP meaning.

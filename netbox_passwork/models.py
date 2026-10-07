@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from django.conf import settings
 from django.db import models
 from netbox.models import ChangeLoggedModel

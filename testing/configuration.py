@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """NetBox configuration for running the plugin's test suite.
 
 Copy (or symlink) this file to `netbox/netbox/netbox/configuration.py` of a NetBox

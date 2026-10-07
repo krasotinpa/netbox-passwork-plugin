@@ -62,5 +62,15 @@ Keep each PR focused on a single task; split large work into smaller PRs.
   (`Added` / `Changed` / `Fixed` / `Removed`).
 - No unrelated refactoring bundled in.
 
+---
+
+## License of contributions
+
+This project is licensed under the [Apache License 2.0](LICENSE). In line with section 5 of the
+License, any contribution you intentionally submit for inclusion (for example, a pull request) is
+licensed under the Apache License 2.0, without any additional terms or conditions. By submitting
+a pull request you confirm that you have the right to license the contributed code under these
+terms.
+
 See [docs/index.md](docs/index.md) for the developer documentation and
 [docs/development.md](docs/development.md) for the test and release workflow.

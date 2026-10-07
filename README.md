@@ -296,7 +296,11 @@ Bug reports, feature requests and pull requests are welcome — see
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE). Attribution notices are in the [NOTICE](NOTICE)
+file; redistributions must keep it, as required by section 4(d) of the License.
 
 The plugin icon ([docs/img/icon.svg](docs/img/icon.svg)) is an original work by the maintainer,
 licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+NetBox and Passwork are trademarks of their respective owners. This project is an independent
+work: it is not affiliated with, endorsed by or supported by the owners of those trademarks.

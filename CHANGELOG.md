@@ -6,6 +6,9 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+### Changed
+- License hygiene per Apache Software Foundation guidance (license type unchanged, still Apache-2.0): new `NOTICE` file shipped in the sdist and wheel alongside `LICENSE`; `LICENSE` restored to the canonical Apache License 2.0 text; `SPDX-License-Identifier: Apache-2.0` headers in the project's source files; a "License of contributions" section in `CONTRIBUTING.md`; a trademark disclaimer for NetBox and Passwork in the README
+
 ## [1.7.0] — 2026-09-30
 
 ### Added

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from netbox.views.generic import ObjectView
 from utilities.views import ViewTab, register_model_view
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from importlib.metadata import version as _pkg_version
 
 from netbox.plugins import PluginConfig

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Standard NetBox changelog for PassworkBinding.
 
 core.ObjectChange records are created by NetBox signals only inside

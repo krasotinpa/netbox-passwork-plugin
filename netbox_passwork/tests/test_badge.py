@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Passwork tab badge (`_passwork_badge`).
 
 Regression: the badge is invoked on every NetBox object page render

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from django.contrib import admin
 
 from netbox_passwork.models import PassworkAuditLog, PassworkBinding

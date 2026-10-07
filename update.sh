@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 #
 # Upgrade the netbox-passwork plugin on a NetBox server.
 #

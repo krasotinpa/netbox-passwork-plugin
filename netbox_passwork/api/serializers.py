@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """API serializers following NetBox convention (<plugin>.api.serializers).
 
 The NetBox events pipeline (webhooks/event rules, also triggered on changelog

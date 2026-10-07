@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Template contract of secrets_tab.html: the header buttons passwork.js toggles
 by id depending on the Passwork auth state (issue #14).

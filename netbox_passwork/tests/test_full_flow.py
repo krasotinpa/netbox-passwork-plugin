@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Phase 7.1: Full flow — login → tab → lazy load → reveal → AuditLog;
 end-to-end scenarios on the real gateway (``build_gateway`` + ``responses``), including the
