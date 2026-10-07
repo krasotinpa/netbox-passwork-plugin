@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Phase 7.2: Picker flow — login → picker (vaults / search) → create binding → check in DB.
 

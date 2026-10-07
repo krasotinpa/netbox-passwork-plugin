@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # Single entry point for the netbox-passwork checks.
 #
 #   scripts/test.sh [pytest-args...]   Python tests (all of them by default; a file, node id or

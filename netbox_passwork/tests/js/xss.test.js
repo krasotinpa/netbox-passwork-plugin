@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * XSS security tests for passwork.js (C1 + C2 from code review).
  *

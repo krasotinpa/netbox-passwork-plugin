@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Auto-hide of revealed detail-card fields (issue #30).
  *

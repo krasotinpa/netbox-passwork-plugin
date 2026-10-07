@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 def get_client_ip(request) -> str | None:
     """
     Extract the client's real IP from the request.

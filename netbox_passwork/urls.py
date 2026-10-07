@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from django.urls import path
 
 from netbox_passwork import views

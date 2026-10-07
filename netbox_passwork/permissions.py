@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 from django.http import JsonResponse
 
 # NetBox ObjectPermissionBackend builds the key as:

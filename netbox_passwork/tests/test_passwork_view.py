@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Tests for the base view of views that talk to Passwork: the order of checks in dispatch,
 permission_required = None, requires_passwork_session = False, translating PassworkError into

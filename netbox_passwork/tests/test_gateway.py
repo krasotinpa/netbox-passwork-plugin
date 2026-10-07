@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Tests for the Passwork gateway: a dict acting as storage, a client on `responses` — without
 a Django session and `request`. Only building the gateway per request (`build_gateway`)

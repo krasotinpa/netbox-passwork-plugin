@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # netbox-passwork release: preparation (release PR) and publishing (tag + GitHub Release + PyPI).
 #
 #   scripts/release.sh check             status: version, latest tag, what has piled up in [Unreleased]

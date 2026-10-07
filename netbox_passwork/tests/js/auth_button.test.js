@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Header button state on the secrets tab (issue #14).
  *

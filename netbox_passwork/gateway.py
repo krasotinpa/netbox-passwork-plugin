@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """
 Passwork gateway — the single point through which the plugin talks to Passwork on
 behalf of the Passwork session (see docs/adr/0001-passwork-gateway-not-middleware.md).
