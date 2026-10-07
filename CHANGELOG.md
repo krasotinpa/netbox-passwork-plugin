@@ -6,6 +6,8 @@ User-visible changes are added under `[Unreleased]` in the PR that makes them;
 
 ## [Unreleased]
 
+## [1.7.2] — 2026-10-07
+
 ### Removed
 - Two empty, unused files: `static/netbox_passwork/styles.css` (never loaded by any page) and `templates/netbox_passwork/secret_detail.html` (the `secrets/<id>/detail/` endpoint returns JSON and renders no template). No behaviour change
 
